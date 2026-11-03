@@ -1,0 +1,14 @@
+[project]
+name = "assignment1"
+version = "0.1.0"
+description = "Assignment 1: rooflines, arithmetic intensity and the memory hierarchy (laptop-side client)"
+readme = "README.md"
+requires-python = ">=3.12"
+# Mirrors requirements.txt. The GPU image's packages live in image-requirements.txt and are installed by Modal, not here.
+dependencies = [
+    "modal==1.5.5",
+    "matplotlib==3.10.0",
+]
+
+[tool.uv]
+package = false
