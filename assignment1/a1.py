@@ -55,7 +55,7 @@ def gpu_facts():
     driver, sm_mhz, mem_mhz, watts = [x.strip() for x in q.split(",")]
     return {"gpu": p.name, "sms": p.multi_processor_count, "l2_mib": p.L2_cache_size / 2**20,
             "hbm_gib": round(p.total_memory / 2**30, 1), "driver": driver, "max_sm_clock_mhz": sm_mhz,
-            "max_mem_clock_mhz": mem_mhz, "power_limit_w": watts, "torch": torch.__version__,
+            "max_mem_clock_mhz": mem_mhz, "power_limit_w": watts, "torch": str(torch.__version__),
             "torch_cuda": torch.version.cuda, "run_id": modal.current_function_call_id(),
             "utc": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())}
 
