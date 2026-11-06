@@ -1,0 +1,23 @@
+profile set 03-swizzle-n4096, n = 4096; runs: n4k-k9 = ('k9/old', '128x128 BK16', 2), n4k-k9s = ('k9+S/old', '128x128 BK16', 2), n4k-k9t = ('k9+T/old', '128x64 BK16', 3), n4k-k9ts = ('k9TS/old', '128x64 BK16', 3)
+saved results/ncu/03-swizzle-n4096-rebuild/n4k-k9.ncu-rep (4.0 MB)
+saved results/ncu/03-swizzle-n4096-rebuild/n4k-k9s.ncu-rep (3.2 MB)
+saved results/ncu/03-swizzle-n4096-rebuild/n4k-k9t.ncu-rep (4.2 MB)
+saved results/ncu/03-swizzle-n4096-rebuild/n4k-k9ts.ncu-rep (4.3 MB)
+saved results/ncu/03-swizzle-n4096-rebuild/n4k-cublas.ncu-rep (18.9 MB)
+
+n = 4096 (ncu replays each kernel, so its time differs a little from ::main)
+report      regs  time us  issue %  total short_sb dispatch  wait barrier global %  DRAM MB  L2 hit
+n4k-k9       125      3.1    87.3%   4.39     0.04     0.28  0.16    0.24     0.9%    595.6   81.3%
+n4k-k9s      143      3.5    75.4%   2.65     0.27     0.14  0.30    0.03     1.8%    462.6   85.6%
+n4k-k9t      168      3.5    76.3%   3.79     0.07     0.53  0.26    0.16     2.7%    962.5   76.9%
+n4k-k9ts     209      3.3    78.1%   2.51     0.10     0.26  0.11    0.05     5.7%    454.7   88.3%
+n4k-cublas   254      2.6    90.2%   2.22     0.20     0.10  0.01    0.10     0.9%    342.3   89.9%
+
+report         inst M other/FFMA  LDS M LDS bank cf M FMA pipe ALU pipe warps/sched        tile
+n4k-k9           2697      0.256    336          0.01    70.4%     7.9%        3.83     128x128
+n4k-k9s          2662      0.240    336          0.00    61.5%     6.1%        2.00     128x128
+n4k-k9t          2689      0.252    134          0.44    62.8%    14.8%        2.89      128x64
+n4k-k9ts         2665      0.241    134          0.01    64.8%    14.6%        1.96      128x64
+n4k-cublas       2428      0.131    101          0.00    79.8%     7.5%        2.00     128x256
+
+open the .ncu-rep files in the Nsight Compute GUI; pick one as baseline to compare the others against it

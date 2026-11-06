@@ -1,0 +1,129 @@
+{
+ "facts": {
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "run_id": "fc-01M6M946AGWF2FNH34AY7NK35X",
+  "utc": "2026-11-04 21:58:35 UTC"
+ },
+ "rows": [
+  {
+   "n": 1024,
+   "kernel": "cuBLAS",
+   "median_us": 64.62400034070015,
+   "min_us": 64.41599875688553,
+   "max_us": 64.70400094985962,
+   "speed_vs_cublas_median": 1.0,
+   "speed_vs_cublas_min": 1.0,
+   "speed_vs_cublas_max": 1.0,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 1024,
+   "kernel": "k14 128x128 BK16 S=2",
+   "median_us": 61.32799945771694,
+   "min_us": 61.13600172102451,
+   "max_us": 61.51999905705452,
+   "speed_vs_cublas_median": 1.0529472903378019,
+   "speed_vs_cublas_min": 1.050455158179813,
+   "speed_vs_cublas_max": 1.0578382440072998,
+   "rounds_faster_than_cublas": 15,
+   "rounds": 15
+  },
+  {
+   "n": 1024,
+   "kernel": "k14 128x64 BK16 S=2",
+   "median_us": 63.58399987220764,
+   "min_us": 63.32799792289734,
+   "max_us": 63.840001821517944,
+   "speed_vs_cublas_median": 1.0171112360998817,
+   "speed_vs_cublas_min": 1.0123208215403179,
+   "speed_vs_cublas_max": 1.0217281940388765,
+   "rounds_faster_than_cublas": 15,
+   "rounds": 15
+  },
+  {
+   "n": 1024,
+   "kernel": "k11 128x64 BK16 S=2",
+   "median_us": 66.00000336766243,
+   "min_us": 65.79200178384781,
+   "max_us": 66.12799689173698,
+   "speed_vs_cublas_median": 0.9788885724340847,
+   "speed_vs_cublas_min": 0.9758045403273341,
+   "speed_vs_cublas_max": 0.983463022791696,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 2048,
+   "kernel": "cuBLAS",
+   "median_us": 341.3439989089966,
+   "min_us": 341.0879969596863,
+   "max_us": 341.72800183296204,
+   "speed_vs_cublas_median": 1.0,
+   "speed_vs_cublas_min": 1.0,
+   "speed_vs_cublas_max": 1.0,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 2048,
+   "kernel": "k13f 256x128 BK16 16x8 S=3",
+   "median_us": 357.85600543022156,
+   "min_us": 357.5519919395447,
+   "max_us": 358.2879900932312,
+   "speed_vs_cublas_median": 0.9538585177538829,
+   "speed_vs_cublas_min": 0.9533792539361825,
+   "speed_vs_cublas_max": 0.955092356189873,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 2048,
+   "kernel": "k11 256x128 BK16 16x8 S=3",
+   "median_us": 363.48798871040344,
+   "min_us": 363.2639944553375,
+   "max_us": 363.8719916343689,
+   "speed_vs_cublas_median": 0.9390416057209066,
+   "speed_vs_cublas_min": 0.9380745244835803,
+   "speed_vs_cublas_max": 0.9402879877924522,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 4096,
+   "kernel": "cuBLAS",
+   "median_us": 2661.1039638519287,
+   "min_us": 2660.576105117798,
+   "max_us": 2662.176012992859,
+   "speed_vs_cublas_median": 1.0,
+   "speed_vs_cublas_min": 1.0,
+   "speed_vs_cublas_max": 1.0,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 4096,
+   "kernel": "k13f 256x128 BK16 16x8 S=3",
+   "median_us": 2761.183977127075,
+   "min_us": 2760.448098182678,
+   "max_us": 2761.952042579651,
+   "speed_vs_cublas_median": 0.963781754395115,
+   "speed_vs_cublas_min": 0.9633625327951154,
+   "speed_vs_cublas_max": 0.964344105954065,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  },
+  {
+   "n": 4096,
+   "kernel": "k11 128x256 BK16 8x16 S=4",
+   "median_us": 2795.135974884033,
+   "min_us": 2794.640064239502,
+   "max_us": 2795.6000566482544,
+   "speed_vs_cublas_median": 0.9520478509001898,
+   "speed_vs_cublas_min": 0.9518429161270082,
+   "speed_vs_cublas_max": 0.9523662720356725,
+   "rounds_faster_than_cublas": 0,
+   "rounds": 15
+  }
+ ]
+}

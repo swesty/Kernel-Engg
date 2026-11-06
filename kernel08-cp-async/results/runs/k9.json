@@ -1,0 +1,1312 @@
+{
+ "facts": {
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "sm": 90,
+  "sms": 132,
+  "torch": "2.14.1+cu130",
+  "run_id": "fc-01M6M6R5YXZ0T80VJMTWDKEFFV",
+  "utc": "2026-11-04 21:17:05 UTC"
+ },
+ "failures": [],
+ "skipped": [
+  "k9 128x64 BK8 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9 128x128 BK8 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9 128x64 BK16 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9 128x128 BK16 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9+T 128x64 BK8 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9+T 128x128 BK8 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9+T 128x64 BK16 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2",
+  "k9+T 128x128 BK16 S=1: PREFETCH refills a slot while the next is read: needs STAGES >= 2"
+ ],
+ "rows": [
+  {
+   "variant": "cuBLAS",
+   "config": "",
+   "stages": 0,
+   "n": 1024,
+   "us": 65.34399837255478
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 1024,
+   "us": 137.1839940547943
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 86.14400029182434
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 81.93599805235863
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 73.21599870920181
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 1024,
+   "us": 183.21599811315536
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 129.61599975824356
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 127.72800028324127
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 129.13599610328674
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 1024,
+   "us": 99.16800260543823
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 76.4480009675026
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 73.87199997901917
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 75.6160020828247
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 1024,
+   "us": 145.88800072669983
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 110.62400043010712
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 111.42399907112122
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 109.68000069260597
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 1024,
+   "us": 140.07999747991562
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 119.4080002605915
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 91.48799628019333
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 115.55200070142746
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 1024,
+   "us": 171.88800126314163
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 122.30399996042252
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 122.19199910759926
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 120.51200121641159
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 1024,
+   "us": 98.49599748849869
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 101.69599950313568
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 71.1359977722168
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 101.95200145244598
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 1024,
+   "us": 140.75200259685516
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 113.00799995660782
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 112.2559979557991
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 112.47999966144562
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 88.03199976682663
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 79.80799674987793
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 81.88799768686295
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 126.20800733566284
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 124.35200065374374
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 121.34400010108948
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 69.92000341415405
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 74.5600014925003
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 69.72800195217133
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 117.11999773979187
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 113.40799927711487
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 117.44000017642975
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 94.40000355243683
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 73.56800138950348
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 89.40800279378891
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 1024,
+   "us": 123.87199699878693
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 1024,
+   "us": 120.35199999809265
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 1024,
+   "us": 121.98399752378464
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 79.6160027384758
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 67.56800040602684
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 82.86399766802788
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 1024,
+   "us": 118.33599954843521
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 1024,
+   "us": 118.23999881744385
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 1024,
+   "us": 119.07199770212173
+  },
+  {
+   "variant": "cuBLAS",
+   "config": "",
+   "stages": 0,
+   "n": 2048,
+   "us": 341.18399024009705
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 2048,
+   "us": 656.4480066299438
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 562.1280074119568
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 478.8320064544678
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 548.2879877090454
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 2048,
+   "us": 704.4959962368011
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 492.6080107688904
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 490.4960095882416
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 495.05600333213806
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 2048,
+   "us": 575.5839943885803
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 550.9119927883148
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 439.0240013599396
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 549.344003200531
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 2048,
+   "us": 564.6560192108154
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 421.7599928379059
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 425.31201243400574
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 418.720006942749
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 2048,
+   "us": 696.0799992084503
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 626.5279948711395
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 512.4320089817047
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 620.3200221061707
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 2048,
+   "us": 660.400003194809
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 470.36801278591156
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 469.32800114154816
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 465.2480036020279
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 2048,
+   "us": 651.1519849300385
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 570.7520246505737
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 426.0319918394089
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 572.1119940280914
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 2048,
+   "us": 539.4719839096069
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 431.71200156211853
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 430.3840100765228
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 429.82399463653564
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 477.6960015296936
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 439.11999464035034
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 484.8960041999817
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 420.6399917602539
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 421.1199879646301
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 412.86399960517883
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 434.25600230693817
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 429.2159974575043
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 437.4399930238724
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 420.8320081233978
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 435.5039894580841
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 420.8479970693588
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 547.8079915046692
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 448.92799854278564
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 538.4320020675659
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 2048,
+   "us": 476.1440008878708
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 2048,
+   "us": 438.0960017442703
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 2048,
+   "us": 469.1520035266876
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 495.07200717926025
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 429.85600233078003
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 507.9360008239746
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 2048,
+   "us": 454.2879909276962
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 2048,
+   "us": 453.19999754428864
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 2048,
+   "us": 457.19999074935913
+  },
+  {
+   "variant": "cuBLAS",
+   "config": "",
+   "stages": 0,
+   "n": 4096,
+   "us": 2661.616086959839
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 4096,
+   "us": 4240.079879760742
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3417.3439741134644
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3541.856050491333
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3315.279960632324
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 4096,
+   "us": 5586.800098419189
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3883.2640647888184
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3867.6159381866455
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3904.911994934082
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 4096,
+   "us": 3779.4079780578613
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3404.416084289551
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3271.391987800598
+  },
+  {
+   "variant": "k8",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3397.536039352417
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 4096,
+   "us": 4455.856084823608
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3313.9359951019287
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3342.736005783081
+  },
+  {
+   "variant": "k8",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3289.8240089416504
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 1,
+   "n": 4096,
+   "us": 4168.031930923462
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 4449.599981307983
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3722.0159769058228
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 4431.7121505737305
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 1,
+   "n": 4096,
+   "us": 5215.1360511779785
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3721.9520807266235
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3711.7120027542114
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3681.8881034851074
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 1,
+   "n": 4096,
+   "us": 3873.695969581604
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 4174.367904663086
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3339.2319679260254
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 4149.120092391968
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 1,
+   "n": 4096,
+   "us": 4239.904165267944
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3367.151975631714
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3359.1840267181396
+  },
+  {
+   "variant": "k8+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3354.559898376465
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3454.576015472412
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3345.4880714416504
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3576.832056045532
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3290.0959253311157
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3450.096011161804
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3385.9360218048096
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3520.911931991577
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3457.0239782333374
+  },
+  {
+   "variant": "k9",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3416.048049926758
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3260.8799934387207
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3397.599935531616
+  },
+  {
+   "variant": "k9",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3265.439987182617
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 4028.2719135284424
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3519.2800760269165
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 4074.608087539673
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 2,
+   "n": 4096,
+   "us": 3738.8800382614136
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 3,
+   "n": 4096,
+   "us": 3412.8799438476562
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK8",
+   "stages": 4,
+   "n": 4096,
+   "us": 3638.7360095977783
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3833.1520557403564
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3390.4320001602173
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x64 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3872.304081916809
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 2,
+   "n": 4096,
+   "us": 3543.056011199951
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 3,
+   "n": 4096,
+   "us": 3536.527991294861
+  },
+  {
+   "variant": "k9+T",
+   "config": "128x128 BK16",
+   "stages": 4,
+   "n": 4096,
+   "us": 3536.03196144104
+  }
+ ],
+ "sass": {
+  "k8": {
+   "LDGSTS": 9,
+   "LDG": 0,
+   "LDS.32": 18,
+   "LDS.128": 32,
+   "FFMA": 512,
+   "BAR": 1
+  },
+  "k8+T": {
+   "LDGSTS": 27,
+   "LDG": 0,
+   "LDS.32": 57,
+   "LDS.128": 32,
+   "FFMA": 512,
+   "BAR": 1
+  },
+  "k9": {
+   "LDGSTS": 12,
+   "LDG": 0,
+   "LDS.32": 37,
+   "LDS.128": 34,
+   "FFMA": 512,
+   "BAR": 2
+  },
+  "k9+T": {
+   "LDGSTS": 36,
+   "LDG": 0,
+   "LDS.32": 75,
+   "LDS.128": 36,
+   "FFMA": 512,
+   "BAR": 2
+  }
+ },
+ "regs": {
+  "k8|128x64 BK8|1": 165,
+  "k8|128x64 BK8|2": 160,
+  "k8|128x64 BK8|3": 164,
+  "k8|128x64 BK8|4": 160,
+  "k8|128x128 BK8|1": 165,
+  "k8|128x128 BK8|2": 130,
+  "k8|128x128 BK8|3": 130,
+  "k8|128x128 BK8|4": 130,
+  "k8|128x64 BK16|1": 167,
+  "k8|128x64 BK16|2": 168,
+  "k8|128x64 BK16|3": 168,
+  "k8|128x64 BK16|4": 168,
+  "k8|128x128 BK16|1": 171,
+  "k8|128x128 BK16|2": 163,
+  "k8|128x128 BK16|3": 163,
+  "k8|128x128 BK16|4": 163,
+  "k8+T|128x64 BK8|1": 163,
+  "k8+T|128x64 BK8|2": 167,
+  "k8+T|128x64 BK8|3": 165,
+  "k8+T|128x64 BK8|4": 167,
+  "k8+T|128x128 BK8|1": 151,
+  "k8+T|128x128 BK8|2": 163,
+  "k8+T|128x128 BK8|3": 149,
+  "k8+T|128x128 BK8|4": 163,
+  "k8+T|128x64 BK16|1": 166,
+  "k8+T|128x64 BK16|2": 160,
+  "k8+T|128x64 BK16|3": 193,
+  "k8+T|128x64 BK16|4": 160,
+  "k8+T|128x128 BK16|1": 195,
+  "k8+T|128x128 BK16|2": 163,
+  "k8+T|128x128 BK16|3": 163,
+  "k8+T|128x128 BK16|4": 163,
+  "k9|128x64 BK8|2": 159,
+  "k9|128x64 BK8|3": 125,
+  "k9|128x64 BK8|4": 130,
+  "k9|128x128 BK8|2": 123,
+  "k9|128x128 BK8|3": 124,
+  "k9|128x128 BK8|4": 124,
+  "k9|128x64 BK16|2": 126,
+  "k9|128x64 BK16|3": 128,
+  "k9|128x64 BK16|4": 126,
+  "k9|128x128 BK16|2": 128,
+  "k9|128x128 BK16|3": 129,
+  "k9|128x128 BK16|4": 128,
+  "k9+T|128x64 BK8|2": 167,
+  "k9+T|128x64 BK8|3": 167,
+  "k9+T|128x64 BK8|4": 167,
+  "k9+T|128x128 BK8|2": 155,
+  "k9+T|128x128 BK8|3": 128,
+  "k9+T|128x128 BK8|4": 161,
+  "k9+T|128x64 BK16|2": 191,
+  "k9+T|128x64 BK16|3": 225,
+  "k9+T|128x64 BK16|4": 168,
+  "k9+T|128x128 BK16|2": 183,
+  "k9+T|128x128 BK16|3": 195,
+  "k9+T|128x128 BK16|4": 183
+ }
+}
