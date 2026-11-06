@@ -1,0 +1,23 @@
+profile set 06-k12-n4096, n = 4096; runs: n4k-k11-256x128 = ('k11', '256x128 BK16 16x8', 4), n4k-k12-256x128 = ('k12', '256x128 BK16 16x8', 4), n4k-k11-128x256 = ('k11', '128x256 BK16 8x16', 4), n4k-k12o-128x256 = ('k12o', '128x256 BK16 8x16', 3)
+saved results/ncu/06-k12-n4096/n4k-k11-256x128.ncu-rep (4.7 MB)
+saved results/ncu/06-k12-n4096/n4k-k12-256x128.ncu-rep (4.7 MB)
+saved results/ncu/06-k12-n4096/n4k-k11-128x256.ncu-rep (4.6 MB)
+saved results/ncu/06-k12-n4096/n4k-k12o-128x256.ncu-rep (4.6 MB)
+saved results/ncu/06-k12-n4096/n4k-cublas.ncu-rep (18.8 MB)
+
+n = 4096 (ncu replays each kernel, so its time differs a little from ::main)
+report      regs  time us  issue %  total short_sb dispatch  wait barrier global %  DRAM MB  L2 hit
+n4k-k11-256x128  231      2.8    80.9%   2.47     0.03     0.24  0.07    0.03     3.0%    306.3   83.6%
+n4k-k12-256x128  219      2.8    83.3%   2.40     0.12     0.23  0.06    0.03     0.6%    306.3   84.5%
+n4k-k11-128x256  231      2.8    82.2%   2.43     0.06     0.21  0.08    0.03     2.4%    373.8   82.1%
+n4k-k12o-128x256  215      2.8    84.6%   2.37     0.13     0.15  0.05    0.02     0.6%    374.0   79.1%
+n4k-cublas   254      2.7    90.2%   2.22     0.20     0.10  0.01    0.10     0.9%    342.1   90.7%
+
+report         inst M other/FFMA  LDS M LDS bank cf M FMA pipe ALU pipe warps/sched        tile
+n4k-k11-256x128    2322      0.081    101          0.00    75.4%     1.0%        2.00     256x128
+n4k-k12-256x128    2379      0.108    101          0.00    75.8%     2.4%        2.00     256x128
+n4k-k11-128x256    2308      0.075    101          0.00    76.8%     0.9%        2.00     128x256
+n4k-k12o-128x256    2378      0.107    101          0.00    76.9%     2.4%        2.00     128x256
+n4k-cublas       2428      0.131    101          0.00    79.8%     7.5%        2.00     128x256
+
+open the .ncu-rep files in the Nsight Compute GUI; pick one as baseline to compare the others against it
