@@ -4,3 +4,4 @@ __pycache__/
 .DS_Store
 lecture3/out/
 lecture3/data/
+.ipynb_checkpoints/
