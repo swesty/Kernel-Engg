@@ -419,8 +419,26 @@ None moved a point sideways. Beating cuBLAS means being closer to the same roof 
 **Next options, by expected payoff:**
 1. **Stream-K at large n without the register cost.** Use a single tile loop, so `tile_body` is inlined once (the full-wave tiles become one-piece Stream-K items), or `__noinline__` it. That would bring kernel 11's code quality into the persistent kernel. Bound: about 3% at n = 4,096 (3.88 vs 4 waves), which is roughly the gap.
 2. **Stream-K plus 2 CTAs per SM at n = 2,048,** where the tiles (128 of 256×128) are fewer than the SMs: the same mechanism that won at n = 1,024.
-3. **SASS-level register allocation** (CuAssembler, maxas-style). That's outside CUDA C.
-4. **Not in scope:** TF32 or tensor cores are a different problem, with different numerics.
+3. **TMA for tile loading (untried; added 2026-11-08).** Test whether Hopper's Tensor Memory Accelerator can reduce copy instructions and address-register pressure enough to improve issue rate. Start with **B only**, retaining A's existing 4-byte `cp.async` copies and transposed shared-memory layout. This is a hypothesis of incremental benefit, not a measured win or a predicted speedup. See the experiment outline below.
+4. **SASS-level register allocation** (CuAssembler, maxas-style). That's outside CUDA C.
+5. **Not in scope:** TF32 or tensor cores are a different problem, with different numerics.
+
+### Proposed experiment: TMA for B tile loads
+
+**Status:** proposed, not implemented or benchmarked. The current kernels use ordinary per-thread `cp.async`, not TMA. TMA changes data movement; this experiment keeps FP32 FFMA arithmetic and TF32 off.
+
+**Why it might help:** TMA can move tensor tiles with fewer issuing threads and less per-thread address bookkeeping. Our remaining issue-rate gap makes reduced instruction and register overhead worth testing. However, E1 already hid global-memory latency, and E5 substantially reduced address overhead. Expect limited headroom unless TMA also improves scheduling or occupancy; no numerical gain is established. Hardware background: [NVIDIA Hopper Tuning Guide — Tensor Memory Accelerator](https://docs.nvidia.com/cuda/hopper-tuning-guide/index.html#tensor-memory-accelerator).
+
+**First variant:** replace only B's global-to-shared copies in a generic k11 configuration with TMA. Keep tile dimensions, stages, FFMA order, and A's load path fixed where possible. Validate B's shared-memory strides, alignment, and tensor-map layout before implementing the transfer; account explicitly for any padding/layout changes required. Use TMA completion barriers and preserve the separate completion requirements of A's ordinary `cp.async` copies before consuming a stage or reusing it.
+
+**Main risks:** descriptor setup and synchronization can outweigh copy savings, especially for small tiles. A's transposed, padded shared-memory layout currently enables efficient vectorized shared loads; migrating A as well would require a separate layout experiment, not a mechanical replacement of its scatter copies. Lower register use helps occupancy only if it crosses a residency threshold. B-only TMA may leave most copy overhead in A.
+
+**Validation and decision:**
+- Compare the TMA variant against the same configuration with ordinary copies at n = 1,024, 2,048, and 4,096 on the pinned H100. Also report against the existing best generic kernel at each size and cuBLAS with TF32 off.
+- Check correctness with NaN-prefilled output and the existing relative-error criterion (< 1e-4), including stage reuse and tail handling for the supported shapes.
+- Use E9's 15 alternating rounds with medians of 40 L2-flushed launches. Report tensor-map setup separately and state whether it is amortized; include all per-invocation GPU work in timings.
+- Profile registers, spills, achieved occupancy, instruction counts, issue-active rate, dispatch/wait stalls, and shared-memory bank conflicts. Save a distinct run tag and source snapshot.
+- Keep the variant only if timing gains exceed run-to-run noise without correctness regressions. If it helps, test integration with k14/Stream-K separately; investigate A's layout only as a subsequent experiment. Record a neutral or negative result too.
 
 ## Gotchas found along the way (each cost a run)
 

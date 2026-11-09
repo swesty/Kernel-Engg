@@ -2,6 +2,7 @@
 
 > **For the write-up:**
 > - [`LAB_NOTEBOOK.md`](LAB_NOTEBOOK.md): every experiment, with hypothesis, prediction, run ID, result and verdict.
+> - [Remaining performance opportunities](LAB_NOTEBOOK.md#where-it-stands-and-whats-left-inferred-unless-marked): open Stream-K, TMA, and SASS experiments; proposed work is distinguished from measured results.
 > - [`SCREENSHOTS.md`](SCREENSHOTS.md): which `.ncu-rep` file and which Nsight Compute page goes with each figure.
 > - [`results/MANIFEST.md`](results/MANIFEST.md): every result file.
 > - [`BIG_WINS.md`](BIG_WINS.md): one-page summary of the wins beyond the course kernels, with measured effects.
