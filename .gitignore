@@ -5,3 +5,7 @@ __pycache__/
 lecture3/out/
 lecture3/data/
 .ipynb_checkpoints/
+
+# Assignment 1 work stays private until submission.
+# Upstream starter files (README, a1.py, PDF, ...) remain tracked.
+assignment1/
