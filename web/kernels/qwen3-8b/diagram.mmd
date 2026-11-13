@@ -1,0 +1,51 @@
+flowchart TB
+    X0["x · residual stream<br/>[T, 4096] BF16"]
+
+    subgraph ATT["ATTENTION HALF"]
+        direction TB
+        N1["RMSNorm #1<br/>[T,4096] → [T,4096]"]
+        QKV["QKV matmul<br/>[T,4096] × W 4096×6144<br/>→ q [T,32,128] · k [T,8,128] · v [T,8,128]"]
+        QKN["QK-norm<br/>RMSNorm per head on q and k<br/>(each 128-vector)"]
+        ROPE["RoPE on q and k<br/>rotate pairs (x_i, x_i+64)<br/>by angle from token position p"]
+        KV[("KV cache in HBM<br/>K, V: [C, 8, 128] each<br/>new k, v appended")]
+        SC["scores = q · Kᵀ<br/>32 query heads, 4 share each KV head (GQA)<br/>T × C query-key pairs per head"]
+        SM["softmax over each score row<br/>5 ops per score"]
+        PV["P · V → [T,32,128] = [T,4096]"]
+        O["O matmul<br/>[T,4096] × W 4096×4096"]
+        R1["residual add #1<br/>x = x + attn_out"]
+        N1 --> QKV --> QKN --> ROPE
+        ROPE -- "q" --> SC
+        ROPE -- "k" --> KV
+        QKV -- "v" --> KV
+        KV -- "all C keys" --> SC
+        SC --> SM --> PV
+        KV -- "all C values" --> PV
+        PV --> O --> R1
+    end
+
+    subgraph MLP["MLP HALF (SwiGLU)"]
+        direction TB
+        N2["RMSNorm #2<br/>[T,4096] → [T,4096]"]
+        GU["gate+up matmul<br/>[T,4096] × W 4096×24576<br/>→ gate [T,12288] · up [T,12288]"]
+        SL["SiLU(gate) × up<br/>[T,12288]"]
+        DN["down matmul<br/>[T,12288] × W 12288×4096"]
+        R2["residual add #2<br/>x = x + mlp_out"]
+        N2 --> GU --> SL --> DN --> R2
+    end
+
+    X0 --> N1
+    X0 -. "skip" .-> R1
+    R1 --> N2
+    R1 -. "skip" .-> R2
+    R2 --> NEXT["→ next block (36 in total)<br/>after block 36: output layer<br/>W 4096×151936, read every token"]
+
+    classDef f1 fill:#cfe3ff,stroke:#2b6cb0,color:#000
+    classDef f2 fill:#ffe1c4,stroke:#c05621,color:#000
+    classDef f3 fill:#d4f5d4,stroke:#2f855a,color:#000
+    classDef f4 fill:#f0e0ff,stroke:#6b46c1,color:#000
+    classDef mem fill:#eeeeee,stroke:#555,color:#000
+    class QKV,O f1
+    class SC,SM,PV f2
+    class GU,DN f3
+    class N1,QKN,ROPE,R1,N2,SL,R2 f4
+    class KV,X0,NEXT mem

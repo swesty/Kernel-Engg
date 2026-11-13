@@ -28,7 +28,7 @@ def arithmetic_intensity(m, k, n):
 
     Problem 8(a): count the operations, count the bytes (each matrix read or written once), and return the ratio.
     """
-    return None   # replace this line with your formula
+    return (2 * m * k * n) / (2 * (m * k + k * n + m * n))
 
 
 def strided_prediction(stride, stride1_tbps):
@@ -37,7 +37,7 @@ def strided_prediction(stride, stride1_tbps):
     Problem 9(a)(i): each thread copies one float (4 bytes read, 4 written, 8 useful bytes). Count the bytes memory
     really moves per float at this stride, from your Problem 4 answers, and scale stride1_tbps by the ratio.
     """
-    return None   # replace this line with your formula
+    return stride1_tbps * 2 / (min(stride, 8) + 1)
 
 
 def load(name):

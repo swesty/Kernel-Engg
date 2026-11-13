@@ -364,7 +364,7 @@ CONFIRM_ROUNDS, CONFIRM_REPS = 15, 40
 
 
 @app.function(gpu=GPU, image=image, timeout=1800)
-def confirm_gpu():
+def confirm_gpu(cases=None):
     import statistics
 
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -373,11 +373,13 @@ def confirm_gpu():
              "utc": time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())}
     src = open(KERNEL_FILE).read()
     out = []
-    for n in sorted({c[0] for c in CONFIRM}):
+    cases = CONFIRM if cases is None else cases
+    correctness = []
+    for n in sorted({c[0] for c in cases}):
         A, B, C = operands(n, seed=7)
         ref = A @ B
         entries = [("cuBLAS", lambda: torch.matmul(A, B, out=C))]
-        for (n0, v, name, st) in CONFIRM:
+        for (n0, v, name, st) in cases:
             if n0 != n:
                 continue
             d = dict(CONFIGS[name], STAGES=st, **{k: (n if x == "per_n" else x) for k, x in VARIANTS[v].items()})
@@ -386,6 +388,7 @@ def confirm_gpu():
             C.fill_(float("nan")); run(); torch.cuda.synchronize()
             err = ((C - ref).abs().max() / ref.abs().max()).item()
             assert bool(torch.isfinite(C).all()) and err < 1e-4, f"{v} {name} wrong at n={n}: {err}"
+            correctness.append({"n": n, "variant": v, "config": name, "stages": st, "relative_error": err})
             entries.append((f"{v} {name} S={st}", run))
         rounds = {label: [] for label, _ in entries}
         for _ in range(CONFIRM_ROUNDS):
@@ -399,7 +402,7 @@ def confirm_gpu():
                         "speed_vs_cublas_min": min(ratio), "speed_vs_cublas_max": max(ratio),
                         "rounds_faster_than_cublas": sum(r > 1 for r in ratio), "rounds": len(ratio)})
         del A, B, C, ref
-    return {"facts": facts, "rows": out}
+    return {"facts": facts, "rows": out, "correctness": correctness}
 
 
 @app.local_entrypoint()
@@ -471,7 +474,10 @@ if which == "cublas":
     import torch
     torch.backends.cuda.matmul.allow_tf32 = False
     A = torch.randn(n, n, device="cuda"); B = torch.randn(n, n, device="cuda"); C = torch.empty(n, n, device="cuda")
+    torch.matmul(A, B, out=C); torch.cuda.synchronize()  # warm up library selection outside capture
+    torch.cuda.cudart().cudaProfilerStart()
     torch.matmul(A, B, out=C); torch.cuda.synchronize()
+    torch.cuda.cudart().cudaProfilerStop()
 else:
     import cupy as cp
     src = "".join(f"#define {k} {v}\n" for k, v in d.items()) + open("/root/matmul_cp_async.cu").read()
@@ -493,6 +499,7 @@ else:
         per_sm = max(1, min(65536 // (rpw * (nt // 32)), (228 * 1024) // (smem + 1024), 2048 // nt, 32))
         G = cp.cuda.runtime.getDeviceProperties(0)["multiProcessorCount"] * per_sm
         tiles = (n // d["BM"]) * (n // d["BN"]); dp = (tiles // G) * G
+        print("STREAMK_SETUP_REQUIRED=" + str(tiles > dp), flush=True)
         if tiles > dp:
             z((tiles - dp,), (256,), (C, np.int32(n), np.int32(n), np.int32(dp)))
         k((G,), (nt,), args, shared_mem=smem)
@@ -504,8 +511,8 @@ TIME, ISSUE = "gpu__time_duration.sum", "smsp__issue_active.avg.pct_of_peak_sust
 STALL = re.compile(r"^smsp__average_warps_issue_stalled_(\w+)_per_issue_active\.ratio$")  # one per stall reason
 
 
-@app.function(gpu=GPU, image=image, timeout=900)
-def profile_gpu(n, runs):
+@app.function(gpu=GPU, image=image, timeout=1800)
+def profile_gpu(n, runs, include_setup=False):
     import shutil
     import subprocess
 
@@ -517,23 +524,42 @@ def profile_gpu(n, runs):
     targets = {name: dict(CONFIGS[c], STAGES=s, **VARIANTS[v]) for name, (v, c, s) in runs.items()}
     cublas_name = "k8-cublas" if n == 1024 else f"n{n // 1024}k-cublas"
     targets[cublas_name] = {}
-    reports, log = {}, []
+    reports, log, errors, kernel_names = {}, [], [], {}
     for name, d in targets.items():
         which = "cublas" if name == cublas_name else "ours"
         kernel_filter = "regex:gemm" if which == "cublas" else "regex:^matmul_"   # cuBLAS names contain "gemm"
+        if include_setup and d.get("STREAMK"):
+            kernel_filter = "regex:^(matmul_|zero_tiles)"
+        launch_count = "2" if include_setup and d.get("STREAMK") else "1"
         # --clock-control none: Modal's GPUs refuse ncu's clock lock ("Failed to lock GPU clock frequencies").
-        res = subprocess.run([str(ncu), "--set", "full", "--import-source", "yes", "--clock-control", "none",
-                              "--kernel-name", kernel_filter, "--launch-count", "1", "-f", "-o", f"/tmp/{name}",
-                              "python", "/tmp/p.py", which, str(n), json.dumps(d)],
-                             capture_output=True, text=True)
+        # cuBLAS can use opaque names such as Kernel2. Capture every launch inside
+        # cudaProfilerStart/Stop around one warmed-up matmul, excluding random fills.
+        filters = (["--profile-from-start", "off"] if which == "cublas" else
+                   ["--kernel-name", kernel_filter, "--launch-count", launch_count])
         rep = Path(f"/tmp/{name}.ncu-rep")
-        if not rep.exists():
+        rep.unlink(missing_ok=True)  # never mistake a prior invocation's file for a new report
+        res = subprocess.run([str(ncu), "--set", "full", "--import-source", "yes", "--clock-control", "none",
+                              *filters, "-f", "-o", f"/tmp/{name}",
+                              "python", "/tmp/p.py", which, str(n), json.dumps(d)],
+                             capture_output=True, text=True, timeout=300)
+        if res.returncode != 0 or not rep.exists():
+            errors.append(f"{name}: ncu exit {res.returncode}; report exists={rep.exists()}")
             log.append(f"--- {name}: no report\n" + "\n".join((res.stdout + res.stderr).splitlines()[-15:]))
             continue
         reports[f"{name}.ncu-rep"] = rep.read_bytes()
-        raw = subprocess.run([str(ncu), "-i", str(rep), "--page", "raw", "--csv"], capture_output=True, text=True).stdout
+        exported = subprocess.run([str(ncu), "-i", str(rep), "--page", "raw", "--csv"], capture_output=True, text=True)
+        raw = exported.stdout
+        expected = [] if which == "cublas" else ["matmul_streamk" if d.get("STREAMK") else "matmul_cp_async"]
+        if include_setup and "STREAMK_SETUP_REQUIRED=True" in res.stdout:
+            expected.append("zero_tiles")
+        try:
+            if exported.returncode:
+                raise ValueError(f"raw export failed: {exported.stderr[-1000:]}")
+            kernel_names[name] = validate_profile_csv(raw, expected)
+        except ValueError as exc:
+            errors.append(f"{name}: {exc}")
         log.append(f"--- {name}\n{raw.strip()}")
-    return {"error": None, "reports": reports, "log": "\n".join(log)}
+    return {"error": "; ".join(errors) or None, "reports": reports, "log": "\n".join(log), "kernel_names": kernel_names}
 
 
 def dram_mb(num, units, head):
@@ -616,3 +642,103 @@ def profile(set: str = "06-k12-n4096", tag: str = ""):
     say("\nopen the .ncu-rep files in the Nsight Compute GUI; pick one as baseline to compare the others against it")
     (out / "summary.txt").write_text("\n".join(lines) + "\n")
     (out / "raw-metrics.csv.txt").write_text(r["log"])        # every raw metric of every report, for the write-up
+
+
+# Representative numbered progression, not an exhaustive autotuning sweep.
+def coverage_runs(n):
+    """Seven numbered kernels, explicit historical k10 mapping, generic shapes."""
+    if n not in (1024, 2048, 4096):
+        raise ValueError("Coverage sizes are 1024, 2048, 4096")
+    big = "256x128 BK16 16x8"
+    return {
+        "k8": ("k8/old", "128x64 BK8", 3),
+        "k9": ("k9+T/old", "128x64 BK8", 3),
+        "k10": ("k9TS", big, 4),
+        "k11": ("k11", "128x64 BK16" if n == 1024 else "128x256 BK16 8x16", 2 if n == 1024 else 4),
+        "k12": ("k12", big, 4),
+        "k13": ("k13", big, 3),
+        "k14": ("k14", "128x128 BK16", 2),
+    }
+
+
+def validate_profile_csv(raw, expected):
+    """Require actual launch rows for each expected kernel, not merely a file."""
+    import csv
+    import io
+    rows = list(csv.reader(io.StringIO(raw)))
+    header_at = next((i for i, row in enumerate(rows) if "Kernel Name" in row), None)
+    if header_at is None:
+        raise ValueError("Nsight export has no Kernel Name column")
+    col = rows[header_at].index("Kernel Name")
+    names = [row[col] for row in rows[header_at + 1:] if len(row) > col and row[col]]
+    if not names:
+        raise ValueError("Nsight report has no launch rows")
+    for kernel in expected:
+        if not any(kernel.lower() in name.lower() for name in names):
+            raise ValueError(f"Nsight report missing {kernel}")
+    return names
+
+
+@app.function(gpu=GPU, image=image, timeout=2400)
+def coverage_gpu(n):
+    """Correctness, unprofiled timings and full reports on the same H100."""
+    import subprocess
+    p = torch.cuda.get_device_properties(0)
+    assert "H100" in p.name, f"Expected pinned H100, got {p.name}"
+    runs = coverage_runs(n)
+    cases = [(n, v, c, st) for v, c, st in runs.values()]
+    timings = confirm_gpu.local(cases)
+    profiles = profile_gpu.local(n, runs, include_setup=True)
+    return {"n": n, "runs": runs, "timings": timings, "profiles": profiles,
+            "gpu_info": subprocess.run(["nvidia-smi"], capture_output=True, text=True, check=True).stdout}
+
+
+@app.local_entrypoint()
+def coverage(tag: str = "", size: int = 0):
+    """Collect k8–k14 + cuBLAS at three sizes (or --size), never overwrite."""
+    import hashlib
+    sizes = [size] if size else [1024, 2048, 4096]
+    for n in sizes:
+        coverage_runs(n)  # validate before creating artifacts or allocating a GPU
+    tag = tag or "coverage-" + time.strftime("%Y%m%d-%H%M%S")
+    if Path(tag).name != tag or tag in (".", ".."):
+        raise ValueError("tag must be a single folder name")
+    out = HERE / "results" / "ncu" / tag
+    out.mkdir(parents=True, exist_ok=False)
+    snapshot(out / "code")
+    manifest = {"status": "running", "sizes": sizes, "requested_gpu": GPU,
+                "scope": "one representative generic configuration per numbered kernel; k10 is k9TS with larger patches",
+                "timing": {"rounds": CONFIRM_ROUNDS, "reps": CONFIRM_REPS, "includes_streamk_zeroing": True},
+                "completed": {}}
+    def save_manifest():
+        (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    save_manifest()
+    try:
+        for n in sizes:
+            print(f"Collecting n={n}: k8–k14 plus cuBLAS on {GPU}", flush=True)
+            r = coverage_gpu.remote(n)
+            dst = out / f"n{n}"
+            dst.mkdir()
+            profiles = r.pop("profiles")
+            (dst / "timings.json").write_text(json.dumps(r, indent=2) + "\n")
+            (dst / "raw-metrics.csv.txt").write_text(profiles.get("log", ""))
+            hashes = {}
+            for name, data in profiles["reports"].items():
+                (dst / name).write_bytes(data)
+                hashes[name] = hashlib.sha256(data).hexdigest()
+            manifest["completed"][str(n)] = {"reports": hashes, "kernel_names": profiles.get("kernel_names", {}),
+                                              "facts": r["timings"]["facts"], "error": profiles["error"]}
+            save_manifest()
+            expected = {f"{label}.ncu-rep" for label in coverage_runs(n)}
+            expected.add(("k8-cublas" if n == 1024 else f"n{n // 1024}k-cublas") + ".ncu-rep")
+            if profiles["error"] or set(hashes) != expected:
+                raise RuntimeError(f"Incomplete coverage at n={n}: {profiles['error']}; missing {expected - set(hashes)}")
+            print(f"Saved {len(hashes)} verified reports for n={n} to {dst}", flush=True)
+        manifest["status"] = "complete"
+    except Exception as exc:
+        manifest["status"] = "failed"
+        manifest["error"] = str(exc)
+        raise
+    finally:
+        save_manifest()
+    print(f"Complete collection: {out}")

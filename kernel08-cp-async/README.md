@@ -36,6 +36,42 @@ cd kernel08-cp-async
 ../assignment1/.venv/bin/modal run matmul08.py::confirm   # winners vs cuBLAS, 15 alternating rounds; results/runs/confirm.*
 ```
 
+### Complete numbered-kernel coverage on H100
+
+```bash
+../assignment1/.venv/bin/modal run matmul08.py::coverage
+# Optional single-size collection; only 1024, 2048, 4096 are supported:
+../assignment1/.venv/bin/modal run matmul08.py::coverage --size 4096 --tag coverage-n4096-new
+```
+
+`::coverage` checks and profiles **kernels 8–14 plus cuBLAS at n=1024, 2048, 4096**.
+This is one representative generic configuration per numbered kernel, not an exhaustive
+variant/tile/stage sweep or a claim that each configuration is optimal. `coverage_runs(n)`
+is the explicit mapping: k8 and k9 preserve their historical contiguous-B paths; k10
+uses `k9TS` with the 256×128, 16×8 thread patch. k13 uses the generic `k13`, not
+size-specialized `k13f`. k14 uses 128×128 BK16, two stages.
+
+Each size runs correctness checks (NaN-prefilled output, finite values, relative error
+below 1e-4), then 15 alternating timing rounds with 40 L2-flushed launches per round,
+and finally Nsight Compute's full metric set on the **same pinned H100 allocation**.
+Unprofiled timings include k14's zeroing launch. Its Nsight report also includes
+`zero_tiles` when launched, separately from `matmul_streamk`; do not treat the main
+kernel's replay duration as total application time. cuBLAS is captured inside
+`cudaProfilerStart/Stop` around one warmed-up matrix multiply, so opaque kernel names
+(such as `Kernel2`) are supported without capturing random-input generation.
+
+Outputs are in a new `results/ncu/coverage-<timestamp>/` folder:
+
+- `manifest.json`: completion status, exact scope, GPU/run identity, report hashes and captured kernel names.
+- `code/`: harness and CUDA source snapshots with SHA-256 checksums.
+- `n1024/`, `n2048/`, `n4096/`: eight `.ncu-rep` files per size, raw metric CSV exports,
+  and `timings.json` containing exact configurations, correctness errors and unprofiled timings.
+
+An explicit tag must name a new folder. Missing reports, failed exports or absent
+expected kernel launches cause failure; returned partial artifacts are retained and the
+manifest says `failed`. Use `--size` with a fresh tag to retry a failed size. A successful
+three-size collection has 24 reports. Earlier experiment folders are never overwritten.
+
 Open the `.ncu-rep` files in the Nsight Compute GUI on your laptop (a free download that doesn't need a GPU). `SCREENSHOTS.md` lists which pair to open for each figure. Neither command overwrites: each run writes its own tag or folder and a snapshot of the code it used.
 
 Settings marked `TUNE` in `matmul08.py`:

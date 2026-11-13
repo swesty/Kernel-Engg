@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>Shared-Memory Bank Conflict Visualizer</title>
+<style>
+  :root { --bg:#0f1115; --panel:#171a21; --line:#2a2f3a; --text:#d7dae0; --dim:#8b93a3;
+          --ok:#3fb950; --c2:#d29922; --c3:#f0883e; --c4:#f85149; --acc:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:12px 18px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:baseline; }
+  header h1 { font-size:16px; margin:0; }
+  header span { color:var(--dim); }
+  main { display:grid; grid-template-columns:280px 1fr; min-height:calc(100vh - 46px); }
+  aside { border-right:1px solid var(--line); padding:14px; background:var(--panel); }
+  aside h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--dim); margin:16px 0 6px; }
+  label { display:flex; justify-content:space-between; align-items:center; margin:5px 0; gap:8px; }
+  input, select { background:#0c0e12; color:var(--text); border:1px solid var(--line); border-radius:4px; padding:3px 6px; font:inherit; }
+  input[type=number] { width:70px; }
+  select { max-width:160px; }
+  section { padding:14px 18px; overflow:auto; }
+  .tabs { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .tab { padding:5px 10px; border:1px solid var(--line); border-radius:14px; cursor:pointer; user-select:none; }
+  .tab.on { border-color:var(--acc); color:var(--acc); }
+  .tab .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .cards { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:8px 12px; min-width:120px; }
+  .card b { display:block; font-size:18px; }
+  .card small { color:var(--dim); }
+  .note { color:var(--dim); margin:6px 0 10px; max-width:900px; }
+  .warn { color:var(--c2); }
+  table { border-collapse:collapse; margin:8px 0 16px; }
+  th, td { border-bottom:1px solid var(--line); padding:4px 10px; text-align:right; }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--dim); font-weight:500; }
+  tr.best td { color:var(--ok); }
+  .rec { background:var(--panel); border-left:3px solid var(--ok); padding:8px 12px; margin:6px 0; max-width:900px; }
+  .rec.bad { border-left-color:var(--c4); }
+  svg text { font-family: ui-monospace, Menlo, monospace; }
+  h2 { font-size:14px; margin:18px 0 6px; }
+  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin:6px 0; }
+</style>
+<style>@media(max-width:760px){main{grid-template-columns:1fr}header{flex-wrap:wrap}aside{border-right:0;border-bottom:1px solid var(--line)}section{padding:12px;min-width:0}}</style></head>
+<body><nav aria-label="Kernel tools" style="padding:10px 20px;border-bottom:1px solid #2a2f3a;font:13px system-ui"><a href="/kernels/" style="color:#7dd3fc;text-decoration:none">← Kernel tools</a></nav>
+<header><h1>Shared-Memory Bank Conflict Visualizer</h1><span>32 banks × 4 bytes · inputs → naive layout → fixes → recommendation</span></header>
+<main>
+<aside>
+  <h3>Preset</h3>
+  <label>Problem <select id="preset">
+    <option value="blur5">5×5 RGB blur (lecture)</option>
+    <option value="blur33">33×33 RGB blur (book)</option>
+    <option value="transpose">32×32 transpose (column read)</option>
+    <option value="custom">Custom</option>
+  </select></label>
+  <h3>GPU</h3>
+  <label>Device <select id="gpu"></select></label>
+  <div id="gpuinfo" class="note"></div>
+  <h3>Block</h3>
+  <label>Block width (BX) <input id="bx" type="number" min="1" max="1024"></label>
+  <label>Block height (BY) <input id="by" type="number" min="1" max="1024"></label>
+  <h3>Access pattern</h3>
+  <label>Pattern <select id="pattern">
+    <option value="stencil">Stencil (row-major)</option>
+    <option value="transpose">Transpose (read column)</option>
+  </select></label>
+  <label>Slots per pixel (C) <input id="c" type="number" min="1" max="16"></label>
+  <label>Slot size (bytes) <select id="slotBytes"><option>4</option><option>2</option><option>1</option></select></label>
+  <label>Halo radius <input id="halo" type="number" min="0" max="32"></label>
+  <label>Component read <input id="comp" type="number" min="0" max="15"></label>
+  <h3>View</h3>
+  <label>Warp # <input id="warp" type="number" min="0" value="0"></label>
+  <label>Offset dy <input id="dy" type="number" min="0" value="0"></label>
+  <label>Offset dx <input id="dx" type="number" min="0" value="0"></label>
+  <p class="note">Ticks shown are the <b>worst</b> over every warp and every stencil offset. The grid shows the single warp/offset chosen here.</p>
+</aside>
+<section>
+  <div class="tabs" id="tabs"></div>
+  <div id="view"></div>
+  <h2>Comparison</h2>
+  <div id="compare"></div>
+  <h2>Recommendation</h2>
+  <div id="recs"></div>
+  <p class="note">Ranking: occupancy on the chosen GPU → fewer shared loads per pixel → less halo loading → less shared memory. Model: bank = word index mod 32; same-word reads broadcast; 8-byte lane loads are served in 2 half-warp phases, 16-byte loads in 4 quarter-warp phases (Programming Guide behaviour; confirm in Nsight Compute with <code>l1tex__data_bank_conflicts_pipe_lsu_mem_shared_op_ld.sum</code>). Rankings are rule-based, not a timing model.</p>
+</section>
+</main>
+<script>
+// ENGINE-START
+const BANKS = 32, WORD = 4;
+
+function mapRows(cfg) { return cfg.pattern === 'transpose' ? cfg.bx : cfg.by + 2 * cfg.halo; }
+function mapPixelsPerRow(cfg) { return cfg.pattern === 'transpose' ? cfg.by : cfg.bx + 2 * cfg.halo; }
+function naiveStride(cfg, C) { return (C ?? cfg.c) * mapPixelsPerRow(cfg); }
+
+// Word indices one lane touches. layout = {S, C, vec, swz}
+function laneWords(cfg, L, t, dy, dx) {
+  const tx = t % cfg.bx, ty = Math.floor(t / cfg.bx);
+  let r, p;
+  if (cfg.pattern === 'transpose') { r = tx; p = ty; } else { r = ty + dy; p = tx + dx; }
+  const slot = r * L.S + p * L.C + (L.vec > 1 ? 0 : cfg.comp);
+  const laneBytes = Math.max(cfg.slotBytes, L.vec * cfg.slotBytes);
+  const b0 = slot * cfg.slotBytes, b1 = b0 + laneBytes - 1;
+  const out = [];
+  for (let w = Math.floor(b0 / WORD); w <= Math.floor(b1 / WORD); w++) {
+    if (L.swz) {
+      const rowWords = L.S * cfg.slotBytes / WORD;        // S is pre-rounded to 32 words
+      const base = r * rowWords, col = w - base;
+      const low = (col & 31) ^ ((r * L.swz) & 31);
+      out.push(base + (col & ~31) + low);
+    } else out.push(w);
+  }
+  return { t, tx, ty, words: out, laneBytes };
+}
+
+function phaseSize(laneBytes) { return laneBytes >= 16 ? 8 : laneBytes >= 8 ? 16 : 32; }
+
+// Ticks for one warp at one offset: sum over phases of the busiest bank's distinct words.
+function warpDetail(cfg, L, w0, dy, dx) {
+  const n = cfg.bx * cfg.by, lanes = [];
+  for (let t = w0; t < Math.min(w0 + 32, n); t++) lanes.push(laneWords(cfg, L, t, dy, dx));
+  const ps = phaseSize(lanes[0].laneBytes);
+  let ticks = 0, phases = 0;
+  const perBank = Array.from({ length: BANKS }, () => new Set());
+  for (let p = 0; p < lanes.length; p += ps) {
+    const banks = Array.from({ length: BANKS }, () => new Set());
+    for (const ln of lanes.slice(p, p + ps)) for (const w of ln.words) { banks[w % BANKS].add(w); perBank[w % BANKS].add(w); }
+    ticks += Math.max(...banks.map(s => s.size)); phases++;
+  }
+  return { lanes, ticks, ideal: phases, perBank: perBank.map(s => s.size) };
+}
+
+function evaluate(cfg, L) {
+  const n = cfg.bx * cfg.by, span = cfg.pattern === 'transpose' ? 1 : 2 * cfg.halo + 1;
+  let worst = 1;
+  for (let dy = 0; dy < span; dy++) for (let dx = 0; dx < span; dx++)
+    for (let w0 = 0; w0 < n; w0 += 32) {
+      const d = warpDetail(cfg, L, w0, dy, dx);
+      worst = Math.max(worst, d.ticks / d.ideal);
+    }
+  const smem = mapRows(cfg) * L.S * cfg.slotBytes * (L.planes || 1);
+  const outputs = cfg.bx * cfg.by;
+  const loads = cfg.pattern === 'transpose' ? 1 : mapRows(cfg) * mapPixelsPerRow(cfg) / outputs;
+  const instr = L.vec > 1 ? 1 : (L.planes || cfg.c);   // shared loads to fetch one whole pixel
+  return { factor: worst, smem, loads, instr, aligned: (L.S * cfg.slotBytes) % 16 === 0 };
+}
+
+const roundUp = (x, m) => Math.ceil(x / m) * m;
+
+function solutions(cfg) {
+  const sols = [], C = cfg.c, base = naiveStride(cfg);
+  const add = (id, name, c2, L, note) => sols.push({ id, name, cfg: c2, L, note, m: evaluate(c2, L) });
+
+  add('naive', 'Naive', cfg, { S: base, C, vec: 1 }, `Unpadded rows of ${base} slots (${C} slots × ${mapPixelsPerRow(cfg)} pixels).`);
+
+  let pad = null;
+  for (let k = 1; k <= 96; k++) if (evaluate(cfg, { S: base + k, C, vec: 1 }).factor === 1) { pad = k; break; }
+  if (pad !== null) add('pad', `Padding +${pad}`, cfg, { S: base + pad, C, vec: 1 }, `Smallest padding that removes conflicts: rows of ${base + pad} slots. Rule (C odd, BX power of 2): largest power of 2 dividing S must equal BX.`);
+  else sols.push({ id: 'pad', name: 'Padding', none: true, note: 'No padding up to +96 removes the conflicts (e.g. even C with scalar loads).' });
+
+  if (cfg.pattern === 'stencil') {
+    const threads = cfg.bx * cfg.by; let best = null;
+    for (let w = 4; w <= 32; w++) {
+      const c2 = { ...cfg, bx: w, by: Math.max(1, Math.floor(threads / w)) };
+      const m = evaluate(c2, { S: naiveStride(c2), C, vec: 1 });
+      if (m.factor === 1 && (!best || m.loads < best.m.loads)) best = { c2, m };
+    }
+    if (best) add('reshape', `Reshape ${best.c2.bx}×${best.c2.by}`, best.c2, { S: naiveStride(best.c2), C, vec: 1 }, `Block width ${best.c2.bx} reads conflict-free with no padding (lowest halo overhead among widths 4–32 at ~${threads} threads).`);
+    else sols.push({ id: 'reshape', name: 'Reshape', none: true, note: 'No block width 4–32 is conflict-free without padding.' });
+  }
+
+  if (C > 1) {
+    const sb = naiveStride(cfg, 1); let p2 = null;
+    for (let k = 0; k <= 96; k++) if (evaluate({ ...cfg, comp: 0 }, { S: sb + k, C: 1, vec: 1 }).factor === 1) { p2 = k; break; }
+    if (p2 !== null) add('soa', `Planes (SoA)${p2 ? ' +' + p2 : ''}`, { ...cfg, comp: 0 }, { S: sb + p2, C: 1, vec: 1, planes: C }, `Store each component as its own plane (C=1, ${C} planes). ${p2 ? `Rows still need +${p2} padding because of the row jump.` : 'Conflict-free as is.'} Shared memory includes all ${C} planes.`);
+  }
+
+  const cp = 2 ** Math.ceil(Math.log2(C));
+  if (C > 1 && cp * cfg.slotBytes <= 16 && cp * cfg.slotBytes >= 8) {
+    const sv = naiveStride(cfg, cp);
+    add('vec', `Vector load (${cp * cfg.slotBytes * 8}-bit)`, cfg, { S: sv, C: cp, vec: cp }, `Pad each pixel to ${cp} slots and fetch it with one ${cp * cfg.slotBytes}-byte load; hardware serves the warp in ${32 / phaseSize(cp * cfg.slotBytes)} phases. All ${C} components arrive in one instruction.`);
+  }
+
+  if (cfg.slotBytes === 4) {
+    const sw = roundUp(base, 32); let best = null;
+    for (let k = 1; k < 32; k++) { const m = evaluate(cfg, { S: sw, C, vec: 1, swz: k }); if (!best || m.factor < best.m.factor) best = { k, m }; }
+    add('swz', `XOR swizzle (×${best.k})`, cfg, { S: sw, C, vec: 1, swz: best.k }, `Row stride rounded to ${sw} slots; column word XOR (row × ${best.k}) mod 32. Best of 31 multipliers. Shines on power-of-2 tiles (transpose, GEMM). Word-level XOR scatters a pixel's components, so it rules out vector loads of whole pixels.`);
+  }
+  return sols;
+}
+
+function occupancy(g, m, threads) {
+  const perBlock = m.smem / 1024 + 1;   // 1 KB reserved per block on sm_80+
+  if (perBlock > g.smemBlk + 1) return { blocks: 0, why: 'exceeds per-block smem' };
+  const bySmem = Math.floor(g.smemSM / perBlock), byThr = Math.floor(g.thr / threads);
+  const blocks = Math.min(bySmem, byThr, g.blk);
+  const why = blocks === bySmem && bySmem < byThr ? 'smem-limited' : blocks === byThr ? 'thread-limited' : 'block-limit';
+  return { blocks, why, occ: blocks * threads / g.thr };
+}
+
+// Conflict-free fixes, best first: occupancy on this GPU, then fewer load
+// instructions per pixel, then less halo loading, then less shared memory.
+function rank(sols, g) {
+  const ok = sols.filter(s => !s.none && s.m.factor === 1 && s.id !== 'naive');
+  const occ = s => occupancy(g, s.m, s.cfg.bx * s.cfg.by).occ || 0;
+  ok.sort((a, b) => occ(b) - occ(a) || a.m.instr - b.m.instr || a.m.loads - b.m.loads || a.m.smem - b.m.smem);
+  return ok;
+}
+// ENGINE-END
+
+const GPUS = [
+  { id: 'h100', name: 'H100 SXM (sm_90)', sms: 132, smemSM: 228, smemBlk: 227, thr: 2048, blk: 32, tma: true, sure: true },
+  { id: 'b200', name: 'B200 (sm_100)', sms: 148, smemSM: 228, smemBlk: 227, thr: 2048, blk: 32, tma: true, sure: true },
+  { id: 'b100', name: 'B100 (sm_100)', sms: null, smemSM: 228, smemBlk: 227, thr: 2048, blk: 32, tma: true, sure: false },
+  { id: 'spark', name: 'DGX Spark GB10 (sm_121)', sms: 48, smemSM: 100, smemBlk: 99, thr: 1536, blk: 32, tma: true, sure: false },
+  { id: 'rtx6kpro', name: 'RTX PRO 6000 Blackwell (sm_120)', sms: 188, smemSM: 100, smemBlk: 99, thr: 1536, blk: 32, tma: true, sure: false },
+  { id: 'rtx5090', name: 'RTX 5090 (sm_120)', sms: 170, smemSM: 100, smemBlk: 99, thr: 1536, blk: 32, tma: true, sure: false },
+  { id: 'rtx3090', name: 'RTX 3090 (sm_86)', sms: 82, smemSM: 100, smemBlk: 99, thr: 1536, blk: 16, tma: false, sure: true },
+];
+const PRESETS = {
+  blur5: { bx: 16, by: 16, pattern: 'stencil', c: 3, slotBytes: 4, halo: 2, comp: 0 },
+  blur33: { bx: 32, by: 8, pattern: 'stencil', c: 3, slotBytes: 4, halo: 16, comp: 0 },
+  transpose: { bx: 32, by: 32, pattern: 'transpose', c: 1, slotBytes: 4, halo: 0, comp: 0 },
+};
+const $ = id => document.getElementById(id);
+const FIELDS = ['bx', 'by', 'pattern', 'c', 'slotBytes', 'halo', 'comp'];
+let current = 'naive';
+
+function color(n) { return n <= 1 ? 'var(--ok)' : n === 2 ? 'var(--c2)' : n === 3 ? 'var(--c3)' : 'var(--c4)'; }
+
+function readCfg() {
+  const c = {};
+  for (const f of FIELDS) c[f] = f === 'pattern' ? $(f).value : +$(f).value;
+  return c;
+}
+
+function drawGrid(sol) {
+  const cfg = sol.cfg, n = cfg.bx * cfg.by, warps = Math.ceil(n / 32);
+  const w = Math.min(+$('warp').value, warps - 1);
+  const d = warpDetail(cfg, sol.L, w * 32, +$('dy').value, +$('dx').value);
+  const cells = new Map();
+  for (const ln of d.lanes) for (const word of ln.words) {
+    const k = word; if (!cells.has(k)) cells.set(k, []); cells.get(k).push(ln.t);
+  }
+  const levels = [...new Set([...cells.keys()].map(k => Math.floor(k / BANKS)))].sort((a, b) => a - b);
+  const CW = 30, CH = 22, X0 = 54, Y0 = 34, H = Y0 + levels.length * CH + 34;
+  let s = `<svg width="${X0 + BANKS * CW + 10}" height="${H}">`;
+  for (let b = 0; b < BANKS; b++) {
+    s += `<text x="${X0 + b * CW + CW / 2}" y="14" fill="#8b93a3" font-size="10" text-anchor="middle">${b}</text>`;
+    const load = d.perBank[b];
+    s += `<rect x="${X0 + b * CW + 2}" y="18" width="${CW - 4}" height="8" fill="${load ? color(load) : '#2a2f3a'}"/>`;
+  }
+  s += `<text x="4" y="14" fill="#8b93a3" font-size="10">bank</text><text x="4" y="26" fill="#8b93a3" font-size="10">load</text>`;
+  levels.forEach((lv, i) => {
+    const y = Y0 + i * CH;
+    s += `<text x="4" y="${y + 15}" fill="#8b93a3" font-size="10">lvl ${lv}</text>`;
+    for (let b = 0; b < BANKS; b++) {
+      const ts = cells.get(lv * BANKS + b), load = d.perBank[b];
+      s += `<rect x="${X0 + b * CW + 1}" y="${y + 1}" width="${CW - 2}" height="${CH - 2}" rx="3" fill="${ts ? color(load) : '#151820'}" fill-opacity="${ts ? .85 : 1}" stroke="#2a2f3a"/>`;
+      if (ts) s += `<text x="${X0 + b * CW + CW / 2}" y="${y + 15}" fill="#0f1115" font-size="${ts.length > 1 ? 8 : 10}" text-anchor="middle">t${ts[0] % 32}${ts.length > 1 ? '+' : ''}</text>`;
+    }
+  });
+  s += `<text x="${X0}" y="${H - 10}" fill="#8b93a3" font-size="11">warp ${w} · ${d.ticks} pass${d.ticks > 1 ? 'es' : ''} (ideal ${d.ideal}) · labels are lane ids; colour = distinct words that bank must serve</text></svg>`;
+  return s;
+}
+
+function render() {
+  const cfg = readCfg(), g = GPUS.find(x => x.id === $('gpu').value);
+  $('gpuinfo').innerHTML = `${g.sms ?? '?'} SMs · ${g.smemSM} KB smem/SM · ${g.smemBlk} KB/block · ${g.thr} threads/SM${g.sure ? '' : ' <span class="warn">⚠ limits unverified</span>'}<br>Bank geometry (32 × 4 B) is identical on every listed GPU; the device only changes occupancy.`;
+  const sols = solutions(cfg);
+  if (!sols.find(s => s.id === current && !s.none)) current = 'naive';
+  $('tabs').innerHTML = sols.map(s => `<span class="tab ${s.id === current ? 'on' : ''}" data-id="${s.id}"><span class="dot" style="background:${s.none ? '#555' : color(Math.ceil(s.m.factor))}"></span>${s.name}</span>`).join('');
+  document.querySelectorAll('.tab').forEach(el => el.onclick = () => { if (!sols.find(s => s.id === el.dataset.id).none) { current = el.dataset.id; render(); } });
+
+  const sol = sols.find(s => s.id === current), m = sol.m, threads = sol.cfg.bx * sol.cfg.by, oc = occupancy(g, m, threads);
+  $('view').innerHTML = `<div class="cards">
+      <div class="card"><b style="color:${color(Math.ceil(m.factor))}">${m.factor.toFixed(m.factor % 1 ? 2 : 0)}×</b><small>worst ticks / ideal</small></div>
+      <div class="card"><b>${sol.L.S}</b><small>row stride (slots)</small></div>
+      <div class="card"><b>${(m.smem / 1024).toFixed(2)} KB</b><small>shared mem / block</small></div>
+      <div class="card"><b>${m.loads.toFixed(2)}</b><small>loads / output</small></div>
+      <div class="card"><b>${oc.blocks}</b><small>blocks/SM on ${g.name.split(' (')[0]} (${oc.why})</small></div>
+      <div class="card"><b>${m.instr}</b><small>smem loads / pixel</small></div>
+      <div class="card"><b>${m.aligned ? 'yes' : 'no'}</b><small>16 B row alignment</small></div>
+    </div><p class="note">${sol.note}</p>${drawGrid(sol)}`;
+
+  $('compare').innerHTML = `<table><tr><th>Fix</th><th>ticks×</th><th>stride</th><th>smem KB</th><th>loads/out</th><th>loads/pixel</th><th>blocks/SM</th><th>aligned</th></tr>` +
+    sols.map(s => s.none ? `<tr><td>${s.name}</td><td colspan="7" style="text-align:left;color:#8b93a3">${s.note}</td></tr>` :
+      `<tr class="${rank(sols, g)[0] === s ? 'best' : ''}"><td>${s.name}</td><td style="color:${color(Math.ceil(s.m.factor))}">${s.m.factor.toFixed(s.m.factor % 1 ? 2 : 0)}</td><td>${s.L.S}</td><td>${(s.m.smem / 1024).toFixed(2)}</td><td>${s.m.loads.toFixed(2)}</td><td>${s.m.instr}</td><td>${occupancy(g, s.m, s.cfg.bx * s.cfg.by).blocks}</td><td>${s.m.aligned ? '✓' : '—'}</td></tr>`).join('') + `</table>`;
+
+  const naive = sols[0].m.factor, r = rank(sols, g);
+  let html = naive === 1 ? `<div class="rec">The naive layout is already conflict-free — nothing to fix. Spend effort elsewhere (coalescing, occupancy).</div>` :
+    `<div class="rec bad">Naive layout: <b>${naive}×</b> ticks per read — every shared-memory read waits for the busiest bank.</div>`;
+  r.slice(0, 3).forEach((s, i) => {
+    const why = [], o = occupancy(g, s.m, s.cfg.bx * s.cfg.by);
+    why.push(`${o.blocks} blocks/SM (${Math.round(o.occ * 100)}% occupancy, ${o.why})`);
+    why.push(`${s.m.instr} shared load${s.m.instr > 1 ? 's' : ''} per pixel`);
+    why.push(`${(s.m.smem / 1024).toFixed(2)} KB smem`);
+    if (s.m.loads !== sols[0].m.loads) why.push(`${s.m.loads.toFixed(2)} loads/output vs ${sols[0].m.loads.toFixed(2)}`);
+    why.push(s.m.aligned ? 'keeps 16 B alignment' : 'breaks 16 B alignment (no vector loads / TMA)');
+    if (s.id === 'swz' && !g.tma) why.push('manual swizzle only (no TMA on this GPU)');
+    if (s.id === 'swz' && g.tma) why.push('TMA can apply 32/64/128 B swizzle in hardware');
+    html += `<div class="rec">${i + 1}. <b>${s.name}</b> — conflict-free; ${why.join('; ')}.</div>`;
+  });
+  if (naive > 1 && !r.length) html += `<div class="rec bad">No single fix reached 1×. Try combining (planes + padding) or changing which thread reads which word.</div>`;
+  $('recs').innerHTML = html;
+}
+
+function loadPreset(p) {
+  if (!PRESETS[p]) return;
+  for (const f of FIELDS) $(f).value = PRESETS[p][f];
+  $('warp').value = 0; $('dy').value = 0; $('dx').value = 0; current = 'naive';
+}
+
+$('gpu').innerHTML = GPUS.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+loadPreset('blur5');
+$('preset').onchange = () => { loadPreset($('preset').value); render(); };
+for (const id of [...FIELDS, 'gpu', 'warp', 'dy', 'dx']) $(id).oninput = () => { if (FIELDS.includes(id)) $('preset').value = 'custom'; render(); };
+render();
+</script>
+</body>
+</html>

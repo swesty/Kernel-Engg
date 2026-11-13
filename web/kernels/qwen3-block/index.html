@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>Qwen3-8B block · shape view (activations vs weights)</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --ink:#e6e8ee; --dim:#8a91a3; --line:#2a2f3a;
+    --f1:#38bdf8; --f2:#e879f9; --f3:#f59e0b; --f4:#22c55e; --fx:#64748b; --cache:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif}
+  header{padding:16px 22px 6px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;max-width:1200px}
+  .tabs{display:flex;gap:6px;padding:10px 22px 0;flex-wrap:wrap}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:7px 14px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:600}
+  .tab.on{color:var(--ink);border-bottom-color:var(--panel);background:#1d212a}
+  main{background:#1d212a;margin:0 22px 22px;border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px 16px}
+  .meta{color:#cbd2e0;font-size:12.5px;margin:0 0 6px;font-variant-numeric:tabular-nums}
+  .blurb{margin:0 0 10px;max-width:1100px}
+  .blurb b{color:#fff}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:12px}
+  .controls label{color:var(--dim);font-size:12px;display:flex;align-items:center;gap:6px}
+  .controls input[type=range]{width:220px}
+  button{background:#2b3140;color:var(--ink);border:1px solid #3a4152;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600}
+  button:hover{background:#353c4e}
+  .steplabel{font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+  .wrap{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap}
+  .rail{display:flex;flex-direction:column;gap:3px;min-width:210px}
+  .chip{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--fx);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;color:#aab1c2}
+  .chip.on{background:#2f2a14;color:#fff;border-color:#5a4a1a}
+  .chip .fam{margin-left:auto;font:11px ui-monospace,Menlo,monospace;color:var(--dim)}
+  .chip.sec{background:none;border:0;cursor:default;color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.06em;padding:8px 2px 2px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  .card h3{margin:0 0 2px;font-size:13px}
+  .card .cap{color:var(--dim);font-size:11.5px;margin-bottom:6px;max-width:640px}
+  .stage{min-width:640px;flex:1}
+  svg{display:block}
+  .side{display:flex;flex-direction:column;gap:12px;min-width:330px;max-width:430px}
+  pre{margin:0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;overflow-x:auto}
+  pre .ln{display:block;padding:0 6px;border-left:3px solid transparent;color:#aab1c2}
+  pre .ln.hot{background:#2f2a14;border-left-color:var(--f3);color:#fff}
+  .metrics div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed #262b35;font-size:12.5px}
+  .metrics div span:last-child{font-variant-numeric:tabular-nums;color:#fff;text-align:right}
+  .metrics .note{display:block;color:var(--dim);border:0;padding-top:6px;font-size:12px}
+  .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:11.5px;color:var(--dim);margin-top:10px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  table{border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+  th{background:#232835;color:#cbd2e0}
+  td code,.blurb code,.metrics code{font:12px ui-monospace,Menlo,monospace;color:#fde047}
+</style>
+</head>
+<body><nav aria-label="Kernel tools" style="padding:10px 20px;border-bottom:1px solid #2a2f3a;font:13px system-ui"><a href="/kernels/" style="color:#7dd3fc;text-decoration:none">← Kernel tools</a></nav>
+<header>
+  <h1>Qwen3-8B transformer block · shape view</h1>
+  <div class="sub">Assignment 1, Problem 3 study aid. Step through one block kernel by kernel. Every tensor is drawn as a rectangle <b>to scale within the step</b> (rows = first dimension). <b>Solid</b> = activation (has T, made fresh for these tokens). <b>Hatched</b> = weight (from the checkpoint, never has T). <b>Dotted</b> = KV cache (has C). Edge colour = family. Shapes only: no FLOP, byte or time numbers on this page.</div>
+</header>
+<div class="tabs" id="tabs"></div>
+<main>
+  <div class="meta" id="meta"></div>
+  <p class="blurb" id="blurb"></p>
+  <div class="controls">
+    <button id="prev">◀</button><button id="play">▶ play</button><button id="next">▶</button>
+    <span class="steplabel" id="steplabel"></span>
+    <label>step <input type="range" id="step" min="0" value="0"></label>
+    <label><input type="checkbox" id="real"> true scale for huge tensors (output layer)</label>
+  </div>
+  <div class="wrap">
+    <div class="rail" id="rail"></div>
+    <div class="card stage">
+      <h3 id="stTitle"></h3>
+      <div class="cap" id="stCap"></div>
+      <svg id="cv" width="660" height="470"></svg>
+    </div>
+    <div class="side">
+      <div class="card"><h3>Code (current line highlighted)</h3><pre id="code"></pre></div>
+      <div class="card"><h3>This step</h3><div class="metrics" id="metrics"></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--f1)"></i>(i) projections: Q, K, V, O</span>
+    <span><i style="background:var(--f2)"></i>(ii) attention: scores, softmax, P·V</span>
+    <span><i style="background:var(--f3)"></i>(iii) MLP: gate, up, down</span>
+    <span><i style="background:var(--f4)"></i>(iv) elementwise + norms</span>
+    <span><i style="background:var(--fx)"></i>not a Problem 3 kernel (free reshape / outside the block)</span>
+    <span><i style="background:#cbd5e1"></i>solid fill = activation</span>
+    <span><i style="background:repeating-linear-gradient(45deg,#cbd5e1 0 2px,transparent 2px 5px)"></i>hatched = weight</span>
+    <span><i style="background:radial-gradient(#a78bfa 1px,transparent 1.5px) 0 0/4px 4px"></i>dotted = KV cache</span>
+    <span><i style="background:transparent;border:2px dashed #fde047"></i>stays on-chip (never written to HBM)</span>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Every kernel, both phases (shapes only)</h3>
+    <table id="summary"></table>
+  </div>
+</main>
+
+<script>
+const D=4096, HQ=32, HKV=8, DH=128, FF=12288, V=151936;
+const PH={decode:{T:1,C:4096,name:'Decode',desc:'<b>Decode:</b> T = 1 new token, reading C = 4,096 earlier tokens from the KV cache. The weights are read once to serve one row of activations.'},
+          prefill:{T:2048,C:2048,name:'Prefill',desc:'<b>Prefill:</b> T = 2,048 prompt tokens at once, causal (each token sees itself and earlier tokens, so C = T and only the lower triangle of scores is needed). FlashAttention keeps scores on-chip. One read of the weights serves all 2,048 rows.'}};
+let phase='decode', step=0, timer=null;
+const FC={1:'var(--f1)',2:'var(--f2)',3:'var(--f3)',4:'var(--f4)',0:'var(--fx)'};
+const FCH={1:'#38bdf8',2:'#e879f9',3:'#f59e0b',4:'#22c55e',0:'#64748b'};
+
+// code lines (index -> text); steps point at a line
+const CODE=[
+ 'ids  = tokenizer(text)              # [T] ints',
+ 'x    = E[ids]                       # lookup, [T,4096]',
+ 'for blk in range(36):',
+ '  r  = x',
+ '  h  = rmsnorm(x, w_n1)             # [T,4096]',
+ '  qkv= h @ W_qkv                    # [T,6144]',
+ '  q,k,v = split_heads(qkv)          # 32/8/8 x 128',
+ '  q,k = qk_norm(q), qk_norm(k)',
+ '  q,k = rope(q, pos), rope(k, pos)',
+ '  K,V = cache.append(k, v)          # [C,8,128]',
+ '  S  = q @ K.T / sqrt(128)          # [32,T,C]',
+ '  P  = softmax(S)                   # [32,T,C]',
+ '  a  = P @ V                        # [32,T,128]',
+ '  a  = concat_heads(a)              # [T,4096]',
+ '  o  = a @ W_o                      # [T,4096]',
+ '  x  = r + o                        # residual #1',
+ '  r  = x',
+ '  h2 = rmsnorm(x, w_n2)             # [T,4096]',
+ '  gu = h2 @ W_gu                    # [T,24576]',
+ '  m  = silu(g) * u                  # [T,12288]',
+ '  d  = m @ W_down                   # [T,4096]',
+ '  x  = r + d                        # residual #2',
+ 'x   = rmsnorm(x, w_final)           # once',
+ 'logits = x @ W_out                  # [T,151936]',
+];
+
+// tensor helpers. dims: [rows, cols]; div: column dividers; kind: act|w|cache
+const A=(n,r,c,o={})=>Object.assign({n,r,c,kind:'act'},o);
+const W=(n,r,c,o={})=>Object.assign({n,r,c,kind:'w'},o);
+const K_=(n,r,c,o={})=>Object.assign({n,r,c,kind:'cache'},o);
+
+const STEPS=[
+ {sec:'Into the model'},
+ {id:'embed',name:'Embedding lookup',fam:0,line:1,lay:'lookup',ops:'none (copy a row)',hbm:'reads T rows of the table',
+  what:'Each token ID picks one row of the embedding table. No multiplication happens: row number = token ID. The result, x, is the first activation.',
+  t:(T,C)=>({ins:[A('ids',T,1,{lbl:'ids ['+T+']'})],w:W('E',V,D,{lbl:'E [151936, 4096]',broken:true}),out:A('x',T,D,{lbl:'x [T, 4096]'})})},
+ {sec:'Attention half'},
+ {id:'n1',name:'RMSNorm #1',fam:4,line:4,lay:'ew',ops:'4 per output element (handout)',hbm:'activation in → activation out',
+  what:'Rescales each token\'s 4,096 numbers by their root-mean-square, then by a learned 4,096-long weight vector (tiny, left out per the handout). Same shape in and out.',
+  t:(T,C)=>({ins:[A('x',T,D,{lbl:'x [T, 4096]'})],out:A('h',T,D,{lbl:'h [T, 4096]'})})},
+ {id:'qkv',name:'Q, K, V projections (fused)',fam:1,line:5,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'weights [4096, 6144] + activations',
+  what:'One matmul against the three weight matrices glued side by side: W_Q [4096,4096] | W_K [4096,1024] | W_V [4096,1024]. K and V are only 1,024 wide because of GQA (8 KV heads × 128).',
+  t:(T,C)=>({a:A('h',T,D,{lbl:'h [T, 4096]'}),w:W('W_qkv',D,6144,{lbl:'W_qkv [4096, 6144]',div:[4096,5120],divl:['W_Q','W_K','W_V']}),out:A('qkv',T,6144,{lbl:'q | k | v  [T, 6144]',div:[4096,5120],divl:['q','k','v']})})},
+ {id:'split',name:'Split into heads',fam:0,line:6,lay:'ew',ops:'none (a reshape, free)',hbm:'none: same numbers, new view',
+  what:'No data moves. The 4,096 columns of q are viewed as 32 heads of 128; k and v as 8 heads of 128 each. The thin lines show head boundaries.',
+  t:(T,C)=>({ins:[A('qkv',T,6144,{lbl:'[T, 6144]',div:[4096,5120]})],out:[A('q',T,D,{lbl:'q [T, 32, 128]',heads:32}),A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8}),A('v',T,1024,{lbl:'v [T, 8, 128]',heads:8})]})},
+ {id:'qkn',name:'QK-norm',fam:4,line:7,lay:'ew',ops:'4 per output element (handout)',hbm:'q and k in → q and k out (v untouched)',
+  what:'An RMSNorm applied to each 128-number head of q and of k separately (not the whole 4,096 row). v skips it.',
+  t:(T,C)=>({ins:[A('q',T,D,{lbl:'q [T, 32, 128]',heads:32}),A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8})],out:[A('q',T,D,{lbl:'q [T, 32, 128]',heads:32}),A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8})]})},
+ {id:'rope',name:'RoPE (rotary position)',fam:4,line:8,lay:'ew',ops:'3 per output element (handout)',hbm:'q and k in → q and k out (cos/sin tables left out)',
+  what:'Rotates pairs of numbers inside each head by an angle that depends on the token\'s position, so q·k ends up depending on how far apart two tokens are. Applied to q and k only.',
+  t:(T,C)=>({ins:[A('q',T,D,{lbl:'q [T, 32, 128]',heads:32}),A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8})],out:[A('q',T,D,{lbl:'q [T, 32, 128]',heads:32}),A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8})]})},
+ {id:'kv',name:'KV cache append',fam:0,line:9,lay:'cache',ops:'none (a write)',hbm:'new k, v rows written; whole cache read next',
+  what:'The new k and v rows join the cache. In decode the cache already holds 4,095 earlier tokens and gains one row. In prefill the whole cache is the prompt itself. Highlighted rows = this step\'s new rows.',
+  t:(T,C)=>({ins:[A('k',T,1024,{lbl:'k [T, 8, 128]',heads:8}),A('v',T,1024,{lbl:'v [T, 8, 128]',heads:8})],out:[K_('Kc',C,1024,{lbl:'K cache [C, 8, 128]',heads:8,newRows:T}),K_('Vc',C,1024,{lbl:'V cache [C, 8, 128]',heads:8,newRows:T})]})},
+ {id:'scores',name:'Scores  S = q·Kᵀ / √128',fam:2,line:10,lay:'mm',ops:'matmul: 2 per multiply-add (one per key, per head)',hbm:'reads the K cache; S itself (prefill) stays on-chip',
+  what:'Drawn for ONE head: its q [T,128] against its K [128,C] gives scores [T,C]. There are 32 of these; each K head is shared by 4 q heads (GQA). In prefill only the lower triangle is needed (causal).',
+  t:(T,C)=>({a:A('q_h',T,DH,{lbl:'q (one head) [T, 128]'}),w:K_('Kt',DH,C,{lbl:'Kᵀ (one KV head) [128, C]'}),out:A('S',T,C,{lbl:'S (one head) [T, C]  ×32 heads',causal:phase==='prefill',onchip:phase==='prefill'})})},
+ {id:'softmax',name:'Softmax',fam:2,line:11,lay:'ew',ops:'5 per score (handout)',hbm:'decode: tiny; prefill: on-chip (FlashAttention)',
+  what:'Each row of scores becomes weights that add up to 1. Same shape in and out. In prefill, FlashAttention computes it piece by piece (online softmax) so S and P never go to HBM.',
+  t:(T,C)=>({ins:[A('S',T,C,{lbl:'S [T, C] ×32',causal:phase==='prefill',onchip:phase==='prefill'})],out:A('P',T,C,{lbl:'P [T, C] ×32',causal:phase==='prefill',onchip:phase==='prefill'})})},
+ {id:'pv',name:'Mix values  a = P·V',fam:2,line:12,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'reads the V cache; writes a',
+  what:'Drawn for ONE head: weights P [T,C] times that head\'s V [C,128] gives a [T,128]: a weighted blend of the values.',
+  t:(T,C)=>({a:A('P',T,C,{lbl:'P (one head) [T, C]',causal:phase==='prefill',onchip:phase==='prefill'}),w:K_('Vh',C,DH,{lbl:'V (one KV head) [C, 128]'}),out:A('a_h',T,DH,{lbl:'a (one head) [T, 128]  ×32'})})},
+ {id:'concat',name:'Concat heads',fam:0,line:13,lay:'ew',ops:'none (a reshape, free)',hbm:'none',
+  what:'The 32 head outputs of 128 are laid side by side: back to one 4,096-wide row per token.',
+  t:(T,C)=>({ins:[A('a',T,D,{lbl:'a [T, 32, 128]',heads:32})],out:A('a',T,D,{lbl:'a [T, 4096]'})})},
+ {id:'o',name:'O projection',fam:1,line:14,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'weights [4096, 4096] + activations',
+  what:'Mixes the 32 heads together: every output number becomes a blend of all heads. The only place in attention where heads talk to each other.',
+  t:(T,C)=>({a:A('a',T,D,{lbl:'a [T, 4096]'}),w:W('W_o',D,D,{lbl:'W_O [4096, 4096]'}),out:A('o',T,D,{lbl:'o [T, 4096]'})})},
+ {id:'r1',name:'Residual add #1',fam:4,line:15,lay:'ew',ops:'1 per output element (handout)',hbm:'two activations in → one out',
+  what:'Adds the attention result onto the block\'s input (saved before RMSNorm #1). This running sum is the "residual stream".',
+  t:(T,C)=>({ins:[A('r',T,D,{lbl:'r (block input) [T, 4096]'}),A('o',T,D,{lbl:'o [T, 4096]'})],out:A('x',T,D,{lbl:'x′ [T, 4096]'})})},
+ {sec:'MLP half'},
+ {id:'n2',name:'RMSNorm #2',fam:4,line:17,lay:'ew',ops:'4 per output element (handout)',hbm:'activation in → activation out',
+  what:'Same as RMSNorm #1, with its own weight vector, before the MLP.',
+  t:(T,C)=>({ins:[A('x',T,D,{lbl:'x′ [T, 4096]'})],out:A('h2',T,D,{lbl:'h2 [T, 4096]'})})},
+ {id:'gu',name:'Gate + up projections (fused)',fam:3,line:18,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'weights [4096, 24576] + activations',
+  what:'One matmul against W_gate [4096,12288] | W_up [4096,12288] side by side. The widest weights in the block.',
+  t:(T,C)=>({a:A('h2',T,D,{lbl:'h2 [T, 4096]'}),w:W('W_gu',D,2*FF,{lbl:'W_gu [4096, 24576]',div:[FF],divl:['W_gate','W_up']}),out:A('gu',T,2*FF,{lbl:'g | u  [T, 24576]',div:[FF],divl:['g','u']})})},
+ {id:'silu',name:'SiLU(g) × u',fam:4,line:19,lay:'ew',ops:'5 per output element (handout)',hbm:'g and u in → m out',
+  what:'SiLU squashes g, then multiplies it elementwise by u ("gated" MLP, SwiGLU). Two [T,12288] in, one [T,12288] out.',
+  t:(T,C)=>({ins:[A('g',T,FF,{lbl:'g [T, 12288]'}),A('u',T,FF,{lbl:'u [T, 12288]'})],out:A('m',T,FF,{lbl:'m [T, 12288]'})})},
+ {id:'down',name:'Down projection',fam:3,line:20,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'weights [12288, 4096] + activations',
+  what:'Brings the 12,288-wide MLP activation back to 4,096. Note the weight is tall, not wide: [12288, 4096] in [in, out] form.',
+  t:(T,C)=>({a:A('m',T,FF,{lbl:'m [T, 12288]'}),w:W('W_down',FF,D,{lbl:'W_down [12288, 4096]'}),out:A('d',T,D,{lbl:'d [T, 4096]'})})},
+ {id:'r2',name:'Residual add #2',fam:4,line:21,lay:'ew',ops:'1 per output element (handout)',hbm:'two activations in → one out',
+  what:'Adds the MLP result onto x′. The output, [T,4096], is the next block\'s input: that matching shape is what lets 36 blocks stack.',
+  t:(T,C)=>({ins:[A('x',T,D,{lbl:'x′ [T, 4096]'}),A('d',T,D,{lbl:'d [T, 4096]'})],out:A('x',T,D,{lbl:'x″ [T, 4096]  → next block'})})},
+ {sec:'After block 36'},
+ {id:'nf',name:'Final RMSNorm',fam:0,line:22,lay:'ew',ops:'4 per element (once, not per block)',hbm:'activation in → out',
+  what:'One more RMSNorm after the last block (standard in Qwen3\'s code as model.norm; not in the handout\'s per-block list).',
+  t:(T,C)=>({ins:[A('x',T,D,{lbl:'x [T, 4096]'})],out:A('x',T,D,{lbl:'x [T, 4096]'})})},
+ {id:'out',name:'Output layer (logits)',fam:1,line:23,lay:'mm',ops:'matmul: 2 per multiply-add',hbm:'weights [4096, 151936] + activations',
+  what:'One score per vocabulary word. Problem 3(b) counts it once per token. The weight is ~37× wider than it is tall; it is drawn compressed unless "true scale" is ticked.',
+  t:(T,C)=>({a:A('x',T,D,{lbl:'x [T, 4096]'}),w:W('W_out',D,V,{lbl:'W_out [4096, 151936]',broken:true}),out:A('logits',T,V,{lbl:'logits [T, 151936]',broken:true})})},
+];
+const REAL=STEPS.filter(s=>!s.sec);
+
+// ---------- drawing ----------
+const svg=document.getElementById('cv'); const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);(parent||svg).appendChild(e);return e;}
+function defs(){
+  const d=el('defs',{});
+  for(const f of [0,1,2,3,4]){
+    const p=el('pattern',{id:'hatch'+f,width:6,height:6,patternUnits:'userSpaceOnUse',patternTransform:'rotate(45)'},d);
+    el('rect',{width:6,height:6,fill:'#141821'},p);
+    el('line',{x1:0,y1:0,x2:0,y2:6,stroke:FCH[f],'stroke-width':2.2,'stroke-opacity':.75},p);
+    const q=el('pattern',{id:'dots'+f,width:5,height:5,patternUnits:'userSpaceOnUse'},d);
+    el('rect',{width:5,height:5,fill:'#141821'},q);
+    el('circle',{cx:2.5,cy:2.5,r:1.1,fill:'#a78bfa'},q);
+  }
+}
+function px(n,s,real){ // dimension -> pixels
+  return Math.max(2, n*s);
+}
+function shownCols(t,real){ if(t.broken && !real) return Math.min(t.c, 4*D); return t.c; }
+function shownRows(t,real){ if(t.broken && !real) return Math.min(t.r, 4*D); return t.r; }
+
+function rect(t,x,y,w,h,fam){
+  const col=FCH[fam];
+  let fill = t.kind==='w' ? 'url(#hatch'+fam+')' : t.kind==='cache' ? 'url(#dots'+fam+')' : col;
+  const g=el('g',{});
+  el('rect',{x,y,width:w,height:h,fill,'fill-opacity':t.kind==='act'?0.33:1,stroke:col,'stroke-width':1.5},g);
+  if(t.causal){ // grey out upper triangle
+    el('path',{d:`M${x},${y} L${x+w},${y} L${x+w},${y+h} Z`,fill:'#0f1115','fill-opacity':.78},g);
+  }
+  if(t.heads){ for(let i=1;i<t.heads;i++){const xx=x+w*i/t.heads; el('line',{x1:xx,y1:y,x2:xx,y2:y+h,stroke:col,'stroke-opacity':.55,'stroke-width':.7},g);} }
+  if(t.div){ t.div.forEach((dv,i)=>{const xx=x+w*dv/t.c; el('line',{x1:xx,y1:y-3,x2:xx,y2:y+h+3,stroke:'#fff','stroke-width':1.4},g);});
+    if(t.divl){const edges=[0,...t.div,t.c]; t.divl.forEach((l,i)=>{const cx=x+w*(edges[i]+edges[i+1])/2/t.c; const tt=el('text',{x:cx,y:y+Math.min(h/2+4,h+14>y+h?h/2+4:h/2+4),'text-anchor':'middle',fill:'#fff','font-size':11,'font-family':'ui-monospace,Menlo,monospace'},g); tt.textContent=l; if(h<14) tt.setAttribute('y',y-6);});}
+  }
+  if(t.newRows && t.newRows < t.r){ const nh=Math.max(4,h*t.newRows/t.r); el('rect',{x,y:y+h-nh,width:w,height:nh,fill:'#fde047','fill-opacity':.85},g); }
+  if(t.newRows && t.newRows >= t.r){ el('rect',{x,y,width:w,height:h,fill:'#fde047','fill-opacity':.18},g); }
+  if(t.onchip){ el('rect',{x:x-4,y:y-4,width:w+8,height:h+8,fill:'none',stroke:'#fde047','stroke-width':1.6,'stroke-dasharray':'5 4'},g); }
+  if(t.broken && !document.getElementById('real').checked && t.c>4*D){ // zigzag break
+    const bx=x+w*0.72; el('path',{d:`M${bx-5},${y-6} l5,6 l-5,6 l5,6`,stroke:'#fff',fill:'none','stroke-width':1.5},g);
+    el('rect',{x:bx-2,y,width:6,height:h,fill:'#1d212a'},g);
+  }
+  return g;
+}
+function label(t,x,y,anchor='start',color='#e6e8ee'){
+  const tt=el('text',{x,y,'text-anchor':anchor,fill:color,'font-size':12,'font-family':'ui-monospace,Menlo,monospace'}); tt.textContent=t; return tt;
+}
+function arrow(x1,y1,x2,y2,txt){
+  el('line',{x1,y1,x2,y2,stroke:'#8a91a3','stroke-width':1.5,'marker-end':'url(#ah)'});
+  if(txt) label(txt,(x1+x2)/2,(y1+y2)/2-6,'middle','#8a91a3');
+}
+function arrowDefs(){const d=svg.querySelector('defs'); const m=el('marker',{id:'ah',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:7,markerHeight:7,orient:'auto'},d); el('path',{d:'M0,0 L10,5 L0,10 Z',fill:'#8a91a3'},m);}
+
+function draw(){
+  while(svg.firstChild) svg.removeChild(svg.firstChild);
+  svg.setAttribute('height',470); defs(); arrowDefs();
+  const s=REAL[step], {T,C}=PH[phase], real=document.getElementById('real').checked;
+  const L=s.t(T,C), fam=s.fam;
+  const Wd=660, H=470, pad=24;
+  if(s.lay==='mm'){
+    // layout: W top-right, A bottom-left, out bottom-right (like the GEMM visualizer)
+    const a=L.a, w=L.w, o=L.out;
+    const wc=shownCols(w,real), ac=a.c, wr=w.r, ar=a.r;
+    const sc=Math.min((Wd-2*pad-40)/(ac+wc),(H-2*pad-60)/(wr+ar));
+    const aw=px(ac,sc), ah=px(ar,sc), ww=px(wc,sc), wh=px(wr,sc);
+    const x0=pad, y0=pad+16;
+    const ox=x0+aw+18, oy=y0+wh+18;
+    rect(w,ox,y0,ww,wh,fam); label(w.lbl,ox,y0-6);
+    rect(a,x0,oy,aw,ah,fam); label(a.lbl,x0,oy-13);
+    rect(o,ox,oy,ww,ah,fam); label(o.lbl,ox,oy+ah+18);
+    label('×',x0+aw+9,oy+Math.min(ah,30)/2+4,'middle','#fff');
+    const fy=Math.max(H-10,oy+ah+44);
+    label('output = (rows of A) × (columns of W); the inner '+(a.c===w.r?a.c.toLocaleString():'?')+' cancels',x0,fy,'start','#8a91a3');
+    svg.setAttribute('height',Math.max(H,fy+10));
+  } else if(s.lay==='lookup'){
+    const w=L.w, o=L.out, ids=L.ins[0];
+    const wr=shownRows(w,real);
+    const sc=Math.min((Wd-2*pad-160)/(w.c*2),(H-2*pad-40)/wr);
+    const ww=px(w.c,sc), wh=px(wr,sc);
+    rect(w,pad+60,pad+16,ww,wh,0); label(w.lbl,pad+60,pad+10);
+    if(!real){label('(drawn shortened: 151,936 rows)',pad+60,pad+16+wh+16,'start','#8a91a3');}
+    const rowY=pad+16+wh*0.37; el('rect',{x:pad+60,y:rowY,width:ww,height:Math.max(2,T*sc*3),fill:'#fde047','fill-opacity':.9});
+    rect(ids,pad,rowY-4,20,Math.max(6,Math.min(80,T*sc*3)),0); label('ids',pad,rowY-10);
+    arrow(pad+22,rowY,pad+58,rowY,'');
+    const ox=pad+60+ww+110; const oh=px(T,sc); rect(o,ox,rowY,ww,Math.max(oh,2),0); label(o.lbl,ox,rowY+Math.max(oh,2)+18);
+    arrow(pad+60+ww+4,rowY+2,ox-4,rowY+2,''); label('copy row #id',(pad+60+ww+ox)/2,rowY-10,'middle','#8a91a3');
+  } else if(s.lay==='cache'){
+    const ins=L.ins, outs=L.out; const maxR=Math.max(...outs.map(t=>t.r)), maxC=1024;
+    const sc=Math.min((Wd-2*pad-220)/(maxC*2+maxC*2*0.15),(H-2*pad-60)/(maxR+40));
+    let y=pad+16, x=pad;
+    ins.forEach((t,i)=>{const w=px(t.c,sc),h=px(t.r,sc); const yy=pad+16+px(maxR,sc)-h; rect(t,x+i*(w+14),yy,w,h,2); label(t.lbl,x+i*(w+14),yy-6);});
+    const ox=pad+2*(px(1024,sc)+14)+50;
+    outs.forEach((t,i)=>{const w=px(t.c,sc),h=px(t.r,sc); const xx=ox+i*(w+24); rect(t,xx,y,w,h,2);
+      const parts=t.lbl.split(' ['); label(parts[0],xx,y+h+18); label('['+parts[1],xx,y+h+33);
+      if(t.newRows<t.r && i===outs.length-1){label('◄ new row'+(t.newRows>1?'s':'')+' (K and V)',xx+w+4,y+h-1,'start','#fde047');}});
+    arrow(pad+2*(px(1024,sc)+14),pad+16+px(maxR,sc)-4,ox-4,pad+16+px(maxR,sc)-4,'append');
+  } else { // ew: inputs left, output right, stacked vertically if several
+    const ins=L.ins, outs=Array.isArray(L.out)?L.out:[L.out];
+    const colW=Math.max(...ins.map(t=>t.c),...outs.map(t=>t.c));
+    const stackH=a=>a.reduce((s,t)=>s+t.r,0);
+    const rowsTot=Math.max(stackH(ins),stackH(outs));
+    const gapsPx=Math.max(ins.length,outs.length)*34;
+    const sc=Math.min((Wd-2*pad-70)/(2*colW),(H-2*pad-gapsPx)/rowsTot);
+    let y=pad+18;
+    ins.forEach(t=>{const w=px(t.c,sc),h=px(t.r,sc); rect(t,pad,y,w,h,fam); label(t.lbl,pad,y-6); y+=h+34;});
+    const ox=pad+px(colW,sc)+60; y=pad+18;
+    outs.forEach(t=>{const w=px(t.c,sc),h=px(t.r,sc); rect(t,ox,y,w,h,fam); label(t.lbl,ox,y-6); y+=h+34;});
+    arrow(pad+px(colW,sc)+8,pad+24,ox-8,pad+24,'');
+  }
+}
+
+// ---------- UI ----------
+function fam(f){return f?['','(i)','(ii)','(iii)','(iv)'][f]:'—';}
+function render(){
+  const s=REAL[step], P=PH[phase];
+  document.getElementById('meta').innerHTML=`Qwen3-8B · BF16 · d = 4,096 · 32 q heads / 8 KV heads × 128 · d_ff = 12,288 · vocab 151,936 · 36 blocks · <b>${P.name}: T = ${P.T.toLocaleString()}, C = ${P.C.toLocaleString()}</b>`;
+  document.getElementById('blurb').innerHTML=P.desc;
+  document.getElementById('steplabel').textContent=`step ${step+1} / ${REAL.length}`;
+  document.getElementById('step').max=REAL.length-1; document.getElementById('step').value=step;
+  document.getElementById('stTitle').innerHTML=`<span style="color:${FCH[s.fam]}">■</span> ${s.name} <span style="color:var(--dim);font-weight:400">· family ${fam(s.fam)}</span>`;
+  document.getElementById('stCap').textContent=s.what;
+  document.querySelectorAll('.chip[data-i]').forEach(c=>c.classList.toggle('on',+c.dataset.i===step));
+  document.getElementById('code').innerHTML=CODE.map((l,i)=>`<span class="ln${i===s.line?' hot':''}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`).join('');
+  const L=s.t(P.T,P.C);
+  const list=x=>(Array.isArray(x)?x:[x]).filter(Boolean).map(t=>`<code>${t.lbl.replace(/\s+×32.*$/,'').replace(/\s+→.*$/,'')}</code>`).join(', ');
+  const ins = s.lay==='mm' ? list(L.a) : list(L.ins);
+  const wts = s.lay==='mm' ? list(L.w) : (L.w?list(L.w):'—');
+  document.getElementById('metrics').innerHTML=
+    `<div><span>family</span><span>${fam(s.fam)}</span></div>`+
+    `<div><span>inputs (activations)</span><span>${ins}</span></div>`+
+    `<div><span>weight / cache</span><span>${wts}</span></div>`+
+    `<div><span>output</span><span>${list(L.out)}</span></div>`+
+    `<div><span>ops</span><span>${s.ops}</span></div>`+
+    `<div><span>memory traffic</span><span>${s.hbm}</span></div>`+
+    `<span class="note">${phase==='decode'?'Decode: compare the sliver-thin activation (T = 1) with the weight. That size gap is why decode matmuls are memory-bound.':'Prefill: the activation is now 2,048 rows tall, so one weight read is shared by many rows.'}</span>`;
+  draw();
+}
+function buildRail(){
+  const r=document.getElementById('rail'); let i=0;
+  STEPS.forEach(s=>{
+    const c=document.createElement('div');
+    if(s.sec){c.className='chip sec';c.textContent=s.sec;}
+    else{c.className='chip';c.dataset.i=i;c.style.borderLeftColor=FCH[s.fam];c.innerHTML=`${i+1}. ${s.name}<span class="fam">${fam(s.fam)}</span>`;const k=i;c.onclick=()=>{step=k;render();};i++;}
+    r.appendChild(c);
+  });
+}
+function buildTabs(){
+  const t=document.getElementById('tabs');
+  for(const k of ['decode','prefill']){const b=document.createElement('div');b.className='tab'+(k===phase?' on':'');b.textContent=PH[k].name+(k==='decode'?' (T = 1)':' (T = 2,048)');b.onclick=()=>{phase=k;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));b.classList.add('on');render();};t.appendChild(b);}
+}
+function buildSummary(){
+  const rows=REAL.map((s,i)=>{const d=s.t(1,4096), p=s.t(2048,2048);
+    const io=(L)=>{const a=s.lay==='mm'?L.a:(L.ins||[]); const lst=x=>(Array.isArray(x)?x:[x]).filter(Boolean).map(t=>t.lbl.replace(/\s+×32.*$/,'').replace(/\s+→.*$/,''));
+      return lst(a).join(', ')+' → '+lst(L.out).join(', ');};
+    const w=s.lay==='mm'?d.w.lbl:(d.w?d.w.lbl:'—');
+    return `<tr><td style="border-left:4px solid ${FCH[s.fam]}">${i+1}. ${s.name}</td><td>${fam(s.fam)}</td><td><code>${w}</code></td><td>${s.ops}</td></tr>`;}).join('');
+  document.getElementById('summary').innerHTML='<tr><th>Kernel</th><th>Family</th><th>Weight / cache operand</th><th>Ops (handout counts where given)</th></tr>'+rows+
+   '<tr><td colspan="4" style="color:var(--dim)">Activation shapes: substitute T = 1, C = 4,096 (decode) or T = 2,048, C = T causal (prefill) into the labels in the stage view. Weights are written [in, out] so products read left to right; PyTorch and Chapter 1 Fig 1.7 store them [out, in]: same bytes.</td></tr>';
+}
+document.getElementById('prev').onclick=()=>{step=(step-1+REAL.length)%REAL.length;render();};
+document.getElementById('next').onclick=()=>{step=(step+1)%REAL.length;render();};
+document.getElementById('step').oninput=e=>{step=+e.target.value;render();};
+document.getElementById('real').onchange=render;
+document.getElementById('play').onclick=e=>{ if(timer){clearInterval(timer);timer=null;e.target.textContent='▶ play';} else {timer=setInterval(()=>{step=(step+1)%REAL.length;render();},1400);e.target.textContent='❚❚ pause';} };
+document.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){step=(step+1)%REAL.length;render();} if(e.key==='ArrowLeft'){step=(step-1+REAL.length)%REAL.length;render();}});
+buildTabs(); buildRail(); buildSummary(); render();
+</script>
+</body>
+</html>

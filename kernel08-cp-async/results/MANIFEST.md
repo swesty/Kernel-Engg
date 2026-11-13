@@ -48,3 +48,7 @@ To rebuild any set completely: `modal run matmul08.py::profile --set <name> --ta
   - `ncu_read*.py` and `ncu_src.py`: the CPU-only Modal jobs that ran `ncu --import` on saved reports. They point at the report paths as they were at the time, before the reorganisation into `ncu/`.
   - `ncu_numba*.py`: reads the lecture10 Numba reports (registers, local memory, static and executed SASS).
   - `sass_hotspots.py`: summarizes a `.sass.csv` (stall shares, an opcode table, and the hottest wait-stalled instructions).
+
+## Complete numbered-kernel coverage — 2026-11-13
+
+[Collection index](ncu/coverage-k8-k14-20261113-v2/README.md): 24 full Nsight reports covering k8–k14 plus cuBLAS at n=1024, 2048, 4096; 21 passing correctness checks; separate unprofiled timing CSV; source snapshots and report hashes. Each k14 report includes initialization. This is representative generic coverage, not an exhaustive configuration sweep. The earlier non-v2 folder is a preserved incomplete attempt.

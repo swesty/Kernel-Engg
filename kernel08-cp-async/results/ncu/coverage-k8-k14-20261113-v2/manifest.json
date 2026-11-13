@@ -1,0 +1,152 @@
+{
+  "status": "complete",
+  "sizes": [
+    1024,
+    2048,
+    4096
+  ],
+  "requested_gpu": "H100!",
+  "scope": "one representative generic configuration per numbered kernel; k10 is k9TS with larger patches",
+  "timing": {
+    "rounds": 15,
+    "reps": 40,
+    "includes_streamk_zeroing": true
+  },
+  "completed": {
+    "1024": {
+      "reports": {
+        "k8.ncu-rep": "637d81378717e9f5a7b07a2b77dac18b08ab9a86309a375d6d969d3ce08fca2b",
+        "k9.ncu-rep": "3b951591cc8eb3825a6eb0cc9152e9f70df305581640f5b6d82240bf0bf78ed6",
+        "k10.ncu-rep": "07cf9f9a9ac85151d28bd035ed65a900ea74b62fd4821e982e198c0ef9c089d9",
+        "k11.ncu-rep": "e432c6619dd83a9be969898766a0460c1a16a194505fe94303e352d30c809b3e",
+        "k12.ncu-rep": "97cdc2021f2b86f38278d3b8f1f5206f16c878cf178b5716e56444c3047ba41d",
+        "k13.ncu-rep": "8381715363e8a54e913aa7ad81a865b456b275cf96cd5d7fa37a61d2abf75908",
+        "k14.ncu-rep": "b6483b0ede407ab2f39a601c6f3de9414e797b55d26a57bd670525cb5f287684",
+        "k8-cublas.ncu-rep": "947768beea335851b09a91de108df4e723626017a2aa2a48e00ea45fa422eb2b"
+      },
+      "kernel_names": {
+        "k8": [
+          "matmul_cp_async"
+        ],
+        "k9": [
+          "matmul_cp_async"
+        ],
+        "k10": [
+          "matmul_cp_async"
+        ],
+        "k11": [
+          "matmul_cp_async"
+        ],
+        "k12": [
+          "matmul_cp_async"
+        ],
+        "k13": [
+          "matmul_cp_async"
+        ],
+        "k14": [
+          "zero_tiles",
+          "matmul_streamk"
+        ],
+        "k8-cublas": [
+          "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize128x64x8_stage3_warpsize2x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas"
+        ]
+      },
+      "facts": {
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "run_id": "fc-01M7AFKC5ZX0PHMJM1SV3VTK8J",
+        "utc": "2026-11-13 12:55:02 UTC"
+      },
+      "error": null
+    },
+    "2048": {
+      "reports": {
+        "k8.ncu-rep": "cfac2103fdff93884a67b91c473f8fd6df0fecbd78c8acd76e054e9dcc749d67",
+        "k9.ncu-rep": "4671b82d47bd8f494b18843aabb34e09410ea7c56f9ca91e1db937ac8e4df1f3",
+        "k10.ncu-rep": "88920f6ae3abba70bf82eb0af59c470f8cdf05f9b1ae8061ca72a5d0bdb7f1a9",
+        "k11.ncu-rep": "925071eb8f62eae4f963fc48e6debc2120925ddf403ebbe60fcb70453972587d",
+        "k12.ncu-rep": "e94a6894ad58891e40c43c400a67e4c9e5701aa2104e7a4d2c87a6fd30c14029",
+        "k13.ncu-rep": "fabe6295ada1ccb948612d00457ef8d03de38d34e555fca11fe08e90ffc9190c",
+        "k14.ncu-rep": "3a7538905e036ea9d3bd04fa177fa00fccd410e757438a854d3ea2ca7aaf3a90",
+        "n2k-cublas.ncu-rep": "75b71649ca1ffd9faa4fd43135fb544c2df39e41dee12fe71ebe1c4de6f1bb4f"
+      },
+      "kernel_names": {
+        "k8": [
+          "matmul_cp_async"
+        ],
+        "k9": [
+          "matmul_cp_async"
+        ],
+        "k10": [
+          "matmul_cp_async"
+        ],
+        "k11": [
+          "matmul_cp_async"
+        ],
+        "k12": [
+          "matmul_cp_async"
+        ],
+        "k13": [
+          "matmul_cp_async"
+        ],
+        "k14": [
+          "zero_tiles",
+          "matmul_streamk"
+        ],
+        "n2k-cublas": [
+          "void Kernel2<cutlass_80_simt_sgemm_256x128_8x4_nn_align1>(Params)"
+        ]
+      },
+      "facts": {
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "run_id": "fc-01M7AFNRJ99JWF5VF6PD08E8JG",
+        "utc": "2026-11-13 12:56:14 UTC"
+      },
+      "error": null
+    },
+    "4096": {
+      "reports": {
+        "k8.ncu-rep": "8dafdcc97877adaaa5116ed517bfe19e64af40f3aa9a957e543600ef6ca82c02",
+        "k9.ncu-rep": "0ebbf5f0df1414ed933e186568fc2c8ece20489811700fbdc943100c27610ec8",
+        "k10.ncu-rep": "725d7b9d39ce786f50e01ac64599af0becbefc4e42f261c160b47c5f28211252",
+        "k11.ncu-rep": "abca047bf6f023378d458e77a98edfcb2867bafd9c44b0294339a5fedbef8de7",
+        "k12.ncu-rep": "7ba7b4f5a680dea506b175f2f51ec1af9cd50931cfc70aa191366854939078b3",
+        "k13.ncu-rep": "a975106df72b77d3c681f69979e0d0e44fb77fef514cd1dd969a831fdfb0c842",
+        "k14.ncu-rep": "ca77f9ae793cd2eb50a3128e0420b6658544549190b9d80fe5b32bfb0f337121",
+        "n4k-cublas.ncu-rep": "53fc709e7a2322267ef1271dda5b1f43d5deadd25b971a45d0955d64f2bc6c40"
+      },
+      "kernel_names": {
+        "k8": [
+          "matmul_cp_async"
+        ],
+        "k9": [
+          "matmul_cp_async"
+        ],
+        "k10": [
+          "matmul_cp_async"
+        ],
+        "k11": [
+          "matmul_cp_async"
+        ],
+        "k12": [
+          "matmul_cp_async"
+        ],
+        "k13": [
+          "matmul_cp_async"
+        ],
+        "k14": [
+          "zero_tiles",
+          "matmul_streamk"
+        ],
+        "n4k-cublas": [
+          "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize256x128x8_stage3_warpsize4x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas"
+        ]
+      },
+      "facts": {
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "run_id": "fc-01M7AFQWJ12QMADQND7CXWQSCE",
+        "utc": "2026-11-13 12:57:23 UTC"
+      },
+      "error": null
+    }
+  }
+}

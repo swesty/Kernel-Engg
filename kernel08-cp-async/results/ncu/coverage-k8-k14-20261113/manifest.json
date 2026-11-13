@@ -1,0 +1,104 @@
+{
+  "status": "failed",
+  "sizes": [
+    1024,
+    2048,
+    4096
+  ],
+  "requested_gpu": "H100!",
+  "scope": "one representative generic configuration per numbered kernel; k10 is k9TS with larger patches",
+  "timing": {
+    "rounds": 15,
+    "reps": 40,
+    "includes_streamk_zeroing": true
+  },
+  "completed": {
+    "1024": {
+      "reports": {
+        "k8.ncu-rep": "a3cde8640d41bf268e0f43fa3383796f9c1cfb5b415058a3af57d28cc7523db0",
+        "k9.ncu-rep": "fd65878ddb103afd57f7f824a4c46d3bb3bd9a84a13d92d4e1ed7bca64d27b26",
+        "k10.ncu-rep": "fac91497e4dc3795b20b7d0aa89bddcf13b49fa8528ff1180c389c2f83519b88",
+        "k11.ncu-rep": "86b1eb1c3f7f3898394e5d5853a592c5759c6b7ebd63a365ce7fe2a0e229341a",
+        "k12.ncu-rep": "1cf600cdd61d6169ce40105b847443cb91a90a82ca9831620a5651b8e5fd0dfd",
+        "k13.ncu-rep": "a1a8816fd61e006a687f6a79537633be1a820a724a4e1d5a6eddd92e3a0eeb11",
+        "k14.ncu-rep": "e9d1ac8b2e4e7995f7b6c6c0170e86f5c9e6ae6de6e5f8d325530f60606027b9",
+        "k8-cublas.ncu-rep": "bfa810b7ee7ea32509df9afa23867b371b175a2f13fb08c40796aa28447dfc17"
+      },
+      "kernel_names": {
+        "k8": [
+          "matmul_cp_async"
+        ],
+        "k9": [
+          "matmul_cp_async"
+        ],
+        "k10": [
+          "matmul_cp_async"
+        ],
+        "k11": [
+          "matmul_cp_async"
+        ],
+        "k12": [
+          "matmul_cp_async"
+        ],
+        "k13": [
+          "matmul_cp_async"
+        ],
+        "k14": [
+          "zero_tiles",
+          "matmul_streamk"
+        ],
+        "k8-cublas": [
+          "sm80_xmma_gemm_f32f32_f32f32_f32_nn_n_tilesize128x64x8_stage3_warpsize2x2x1_ffma_aligna4_alignc4_execute_kernel__5x_cublas"
+        ]
+      },
+      "facts": {
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "run_id": "fc-01M7AFAG1ZDXK5CW9QF4D1GZ0H",
+        "utc": "2026-11-13 12:51:32 UTC"
+      },
+      "error": null
+    },
+    "2048": {
+      "reports": {
+        "k8.ncu-rep": "d4e3f4fa7e4d8fa16b8762e09ce3346a5372191f91a77c41440d4d5777322cd2",
+        "k9.ncu-rep": "988bc2791a873dcec8f136859579a654bd674183736e8c3b6e54289747c3afa6",
+        "k10.ncu-rep": "0bb2fb3e0705c45010bf4ecdfa2aadb86954ef21f508398c8823847e36d2ea2d",
+        "k11.ncu-rep": "c850d623e9e8c136d04e4c635156079dec8b9d6a30fd22904842431adccadd31",
+        "k12.ncu-rep": "bf5fcfcc347181973c4ec321d606bb2a55fadfa3253be6d1fe3af150f91bdb6c",
+        "k13.ncu-rep": "b3ec9f6d7e0202241b36531fd93a84ae79d800abb22ac63065fe67145bf14ba1",
+        "k14.ncu-rep": "cfe3fd72f68e5e439a0720100f4bbd3ad25c88832ea21fa715ad7676d55d951e"
+      },
+      "kernel_names": {
+        "k8": [
+          "matmul_cp_async"
+        ],
+        "k9": [
+          "matmul_cp_async"
+        ],
+        "k10": [
+          "matmul_cp_async"
+        ],
+        "k11": [
+          "matmul_cp_async"
+        ],
+        "k12": [
+          "matmul_cp_async"
+        ],
+        "k13": [
+          "matmul_cp_async"
+        ],
+        "k14": [
+          "zero_tiles",
+          "matmul_streamk"
+        ]
+      },
+      "facts": {
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "run_id": "fc-01M7AFFCF1ZT6V972EG30PHZH7",
+        "utc": "2026-11-13 12:52:45 UTC"
+      },
+      "error": "n2k-cublas: ncu exit 0; report exists=False"
+    }
+  },
+  "error": "Incomplete coverage at n=2048: n2k-cublas: ncu exit 0; report exists=False; missing {'n2k-cublas.ncu-rep'}"
+}

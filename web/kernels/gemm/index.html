@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>GEMM kernels 1–7 + Tensor Cores — thread view + memory view</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --ink:#e6e8ee; --dim:#8a91a3; --line:#2a2f3a;
+    --ld:#38bdf8; --bc:#e879f9; --acc:#f59e0b; --st:#22c55e; --zero:#64748b; --lane:#fde047; --frag:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif}
+  header{padding:16px 22px 6px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px}
+  .tabs{display:flex;gap:6px;padding:10px 22px 0;flex-wrap:wrap}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:7px 14px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:600}
+  .tab.on{color:var(--ink);border-bottom-color:var(--panel);background:#1d212a}
+  .tabsep{align-self:center;color:#4a5162;font-size:12px;padding:0 4px}
+  main{background:#1d212a;margin:0 22px 22px;border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px 16px}
+  .meta{color:#cbd2e0;font-size:12.5px;margin:0 0 6px;font-variant-numeric:tabular-nums}
+  .blurb{margin:0 0 10px;max-width:1100px}
+  .blurb b{color:#fff}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:12px}
+  .controls label{color:var(--dim);font-size:12px;display:flex;align-items:center;gap:6px}
+  .controls input[type=range]{width:150px}
+  .controls .val{color:var(--ink);font-variant-numeric:tabular-nums;min-width:34px;display:inline-block}
+  select{background:#2b3140;color:var(--ink);border:1px solid #3a4152;border-radius:6px;padding:4px 6px;font:12px ui-monospace,Menlo,monospace}
+  button{background:#2b3140;color:var(--ink);border:1px solid #3a4152;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600}
+  button:hover{background:#353c4e}
+  .steplabel{font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+  .grid{display:grid;grid-template-columns:auto auto auto;gap:14px;align-items:start}
+  @media (max-width:1250px){.grid{grid-template-columns:auto auto}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 10px}
+  .card h3{margin:0 0 2px;font-size:13px}
+  .card .cap{color:var(--dim);font-size:11.5px;margin-bottom:6px;max-width:300px}
+  canvas{display:block;image-rendering:pixelated}
+  .side{display:flex;flex-direction:column;gap:12px;min-width:330px;max-width:420px}
+  pre{margin:0;font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;overflow-x:auto}
+  pre .ln{display:block;padding:0 6px;border-left:3px solid transparent;color:#aab1c2}
+  pre .ln.hot{background:#2f2a14;border-left-color:var(--acc);color:#fff}
+  .metrics div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed #262b35;font-size:12.5px}
+  .metrics div span:last-child{font-variant-numeric:tabular-nums;color:#fff;text-align:right}
+  .metrics .note{display:block;color:var(--dim);border:0;padding-top:6px;font-size:12px}
+  .metrics .good{color:#4ade80!important}.metrics .bad{color:#f87171!important}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--dim);margin-top:10px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  .sync{display:none;background:#3b1d1d;border:1px solid #7f1d1d;color:#fecaca;border-radius:6px;padding:6px 10px;font-weight:700;margin-bottom:10px}
+  body.insync .sync{display:block}
+  body.insync canvas{opacity:.45}
+  .insp{font-size:12.5px}
+  .insp code{color:var(--lane)}
+  table{border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  th,td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+  th{background:#232835;color:#cbd2e0}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  tr.grp td{background:#20242e;color:#cbd2e0;font-weight:700}
+  .hide{display:none!important}
+</style>
+</head>
+<body><nav aria-label="Kernel tools" style="padding:10px 20px;border-bottom:1px solid #2a2f3a;font:13px system-ui"><a href="/kernels/" style="color:#7dd3fc;text-decoration:none">← Kernel tools</a></nav>
+<header>
+  <h1>GEMM kernels 1–7 + Tensor Cores · thread view + memory view</h1>
+  <div class="sub">Lecture 8 / Week 2-4 (kernels 1–4), Lecture 10 (matmul-05/06/07), Lecture 12 (tc-01/tc-02). Row-major matrices; one <b>block</b> and one <b>warp</b> at a time. In global-memory panels a thin gridline marks a <b>32-byte sector</b> (8 floats, or 16 halves). Each tab states its own problem size.</div>
+</header>
+<div class="tabs" id="tabs"></div>
+<main>
+  <div class="meta" id="meta"></div>
+  <p class="blurb" id="blurb"></p>
+  <div class="controls">
+    <button id="prev">◀</button><button id="play">▶ play</button><button id="next">▶</button>
+    <span class="steplabel" id="steplabel"></span>
+    <label>step <input type="range" id="step" min="0" value="0"><span class="val" id="stepv"></span></label>
+    <label id="tileWrap"><span id="tileName">tile t</span> <input type="range" id="tile" min="0" value="0"><span class="val" id="tilev"></span></label>
+    <label id="cfgWrap">config <select id="cfg"></select></label>
+    <label id="bxWrap">blockIdx.x <input type="range" id="bx" min="0" value="0" style="width:110px"><span class="val" id="bxv"></span></label>
+    <label id="byWrap">blockIdx.y <input type="range" id="by" min="0" value="0" style="width:110px"><span class="val" id="byv"></span></label>
+    <label>warp <input type="range" id="warp" min="0" value="0"><span class="val" id="warpv"></span></label>
+    <label>lane (thread in warp) <input type="range" id="lane" min="0" max="31" value="0"><span class="val" id="lanev"></span></label>
+    <label><input type="checkbox" id="allw"> show all warps</label>
+    <label>speed <input type="range" id="speed" min="60" max="900" value="380" style="width:90px"></label>
+  </div>
+  <div class="sync">cuda.syncthreads() — every warp in the block waits here until all of them arrive.</div>
+  <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+    <div class="grid" id="panels">
+      <div class="card"><h3 id="hC">C — thread view</h3><div class="cap" id="capC"></div><canvas id="cvC"></canvas></div>
+      <div class="card"><h3 id="hA">A — global memory</h3><div class="cap" id="capA"></div><canvas id="cvA"></canvas></div>
+      <div class="card"><h3 id="hB">B — global memory</h3><div class="cap" id="capB"></div><canvas id="cvB"></canvas></div>
+      <div class="card" style="grid-column:1/-1"><h3 id="hR">Registers — selected warp</h3><div class="cap" id="capR"></div><canvas id="cvR"></canvas></div>
+      <div class="card smem"><h3 id="hTA">tileA — shared memory</h3><div class="cap" id="capTA"></div><canvas id="cvTA"></canvas></div>
+      <div class="card smem"><h3 id="hTB">tileB — shared memory</h3><div class="cap" id="capTB"></div><canvas id="cvTB"></canvas></div>
+    </div>
+    <div class="side">
+      <div class="card"><h3>Code (current line highlighted)</h3><pre id="code"></pre></div>
+      <div class="card"><h3>This step, for the selected warp</h3><div class="metrics" id="metrics"></div></div>
+      <div class="card insp"><h3>Lane inspector</h3><div id="insp"></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--ld)"></i>warp reads/writes distinct addresses</span>
+    <span><i style="background:var(--bc)"></i>broadcast — all 32 lanes hit one address</span>
+    <span><i style="background:var(--acc)"></i>accumulating in registers</span>
+    <span><i style="background:var(--st)"></i>stored to C</span>
+    <span><i style="background:var(--zero)"></i>zero-filled (out of bounds) or zero padding</span>
+    <span><i style="background:var(--frag)"></i>held in a WMMA fragment (lane mapping unspecified)</span>
+    <span><i style="background:transparent;border:2px solid #fff"></i>32-byte sector fetched</span>
+    <span><i style="background:transparent;border:2px solid var(--lane)"></i>selected lane</span>
+    <span><i style="background:hsl(200 30% 30%)"></i>held in a register, untouched this step</span>
+    <span><i style="background:hsl(199 40% 26%)"></i>already loaded on an earlier pass</span>
+    <span><i style="background:linear-gradient(90deg,hsl(0 55% 42%),hsl(120 55% 42%),hsl(240 55% 42%))"></i>other warps (with "show all warps")</span>
+    <span>C cells tinted by owning warp (selected warp brighter)</span>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Side by side</h3>
+    <table>
+      <tr><th>Kernel</th><th>Warp covers</th><th>Global sectors per warp per k-step (A + B)</th><th>Shared reads per FMA (per thread)</th><th>Timing</th><th>What to look at</th></tr>
+      <tr class="grp"><td colspan="6">Lecture 8 / Week 2-4 · M = 1000, K = 1200, N = 800, fp32 · timings are T4 Nsight from the live session</td></tr>
+      <tr><td>1 · warps down columns</td><td>a column of C</td><td class="n">32 + 1 = 33</td><td class="n">—</td><td class="n">~64 ms</td><td>uncoalesced loads + stores, LG throttle</td></tr>
+      <tr><td>2 · swap x/y</td><td>a row of C</td><td class="n">1 + 4 = 5</td><td class="n">—</td><td class="n">~16 ms</td><td>ALU busiest (index math)</td></tr>
+      <tr><td>3 · 32×32 smem tiles</td><td>a row of C</td><td class="n">(4 + 4) once per 32 k-steps = 0.25</td><td class="n">2</td><td class="n">~5 ms</td><td>MIO throttle (too many smem reads)</td></tr>
+      <tr><td>4 · 1D block tiling, TM = 8</td><td>8 rows of C (each lane: an 8-tall column strip)</td><td class="n">(32 + 32) once per 32 k-steps = 2, for 256 outputs</td><td class="n">9 / 8 = 1.125</td><td class="n">not read out</td><td>MIO throttle gone</td></tr>
+      <tr class="grp"><td colspan="6">Lecture 10 · M = N = K = 1024, fp32 · not run on a GPU for this page</td></tr>
+      <tr><td>5 · 2D block tiling, 4×4 patches</td><td>8 rows × 64 cols (two rows of 16 patches)</td><td class="n">(16 + 16) once per 16 k-steps = 2, for 512 outputs</td><td class="n">8 / 16 = 0.5</td><td class="n">—</td><td>compute reads: 2-way bank conflicts on tileA and tileB</td></tr>
+      <tr><td>6 · warp tiling + transposed A</td><td>16 × 32 region (4 rows of 8 patches)</td><td class="n">(16 + 16 distinct) per 16 k-steps = 2, for 512 outputs</td><td class="n">8 / 16 = 0.5</td><td class="n">—</td><td>compute reads conflict-free; the grouped tileA and tileB stores are 4-way (bank model)</td></tr>
+      <tr><td>7 · kernel factory, 11 configs</td><td>WM × WN, chosen per config</td><td class="n">depends on config</td><td class="n">(TM+TN)/(TM·TN): 0.5, 0.375 or 0.25</td><td class="n">—</td><td>same algorithm as 6; the host searches tile shapes</td></tr>
+      <tr class="grp"><td colspan="6">Lecture 12 · fp16 in, fp32 accumulate · WMMA 16×16×16 · not run on a GPU for this page</td></tr>
+      <tr><td>TC-01 · one warp, one tile</td><td>the whole 16×16 C (collectively)</td><td class="n">16 + 16 once, for 256 outputs</td><td class="n">no shared memory</td><td class="n">—</td><td>B declared col_major; a fragment's lane mapping is unspecified</td></tr>
+      <tr><td>TC-02 · padded any-size</td><td>one 16×16 C tile per warp, 4 warps per block</td><td class="n">(16 + 16) per 16 k-steps = 2, for 256 outputs</td><td class="n">no shared memory</td><td class="n">—</td><td>K padded to 1008; the 4 warps each fetch the same B tile separately</td></tr>
+    </table>
+  </div>
+</main>
+
+<script>
+const K = 1200, M = 1000, N = 800, T = 32, NUM_TILES = Math.ceil(K / T);
+let CS = 9;
+const COL = {ld:'#38bdf8', bc:'#e879f9', acc:'#f59e0b', st:'#22c55e', zero:'#64748b', lane:'#fde047', done:'hsl(199 40% 26%)', frag:'#a78bfa'};
+
+/* A mark: {p: panel, r, c, s: style, lane, ins: instruction id}. r/c are GLOBAL coords for A/B/C, tile coords for tA/tB.
+   Marks with no lane belong to the warp as a whole (WMMA); marks with no ins are drawn but not counted. */
+function range(n){return [...Array(n).keys()];}
+
+/* ---------- Kernels 1–4 (Lecture 8 / Week 2-4) ---------- */
+function naive(kind){ // kind 1: x→row (bad), kind 2: x→col
+  const steps = range(32).map(i => ({label:`k-step i = ${i}`, line:5, i}));
+  steps.push({label:'store C', line:6, store:true});
+  const code = kind === 1 ? [
+    'out_row = threadIdx.x + blockDim.x*blockIdx.x   # x → ROW',
+    'out_col = threadIdx.y + blockDim.y*blockIdx.y',
+    'if out_col >= n or out_row >= m: return',
+    'dot_product = float32(0.0)',
+    'for i in range(k):',
+    '    dot_product += matA[out_row, i] * matB[i, out_col]',
+    'matC[out_row, out_col] = dot_product'] : [
+    'out_col = threadIdx.x + blockDim.x*blockIdx.x   # x → COL',
+    'out_row = threadIdx.y + blockDim.y*blockIdx.y',
+    'if out_col >= n or out_row >= m: return',
+    'dot_product = float32(0.0)',
+    'for i in range(k):',
+    '    dot_product += matA[out_row, i] * matB[i, out_col]',
+    'matC[out_row, out_col] = dot_product'];
+  return {
+    name: kind === 1 ? '1 · warps down columns' : '2 · warps along rows',
+    blurb: kind === 1
+      ? 'Block = 32×32 threads, so <b>warp w = all threads with threadIdx.y = w</b> (lanes are threadIdx.x 0–31). Because <code>out_row</code> comes from <code>threadIdx.x</code>, the 32 lanes of a warp sit in 32 <b>different rows</b> of C — one column. At each k-step the warp asks A for 32 floats that are K = 1200 floats apart (32 sectors, 4 useful bytes in each) and asks B for a single float (broadcast). Coalescing is decided <b>across the warp at one i</b>, not along one thread\'s loop.'
+      : 'One change: <code>.x</code> and <code>.y</code> are swapped. Now the 32 lanes of warp w sit in <b>one row</b> of C, side by side. At each k-step all lanes want the same A element (broadcast, 1 sector) and 32 <b>neighbouring</b> B elements (4 sectors, 100% used). The C store is 4 sectors instead of 32. Same math, 4× faster on the T4.',
+    numWarps: 32, tiled: false, code, steps,
+    owner: (r, c) => kind === 1 ? c : r,         // which warp computes C[r,c] in block (0,0)
+    window: () => ({A:{r0:0, c0:0}, B:{r0:0, c0:0}}),
+    capA: 'Rows = the block\'s 32 output rows; columns = k 0–31 (first 32 of 1200). Each row is contiguous in DRAM; rows are 4,800 bytes apart.',
+    capB: 'Rows = k 0–31; columns = the block\'s 32 output columns. Each row of B is contiguous; rows are 3,200 bytes apart.',
+    capC: kind === 1 ? 'Tint = owning warp. Vertical stripes: each warp owns a column.' : 'Tint = owning warp. Horizontal stripes: each warp owns a row.',
+    frame(st, w){
+      const m = [];
+      for (const lane of range(32)){
+        const row = kind === 1 ? lane : w, col = kind === 1 ? w : lane;
+        m.push({p:'C', r:row, c:col, s: st.store ? 'st' : 'acc', lane, ins: st.store ? 'stC' : null});
+        if (!st.store){
+          m.push({p:'A', r:row, c:st.i, s:'ld', lane, ins:'ldA'});
+          m.push({p:'B', r:st.i, c:col, s:'ld', lane, ins:'ldB'});
+        }
+      }
+      return {marks:m, fma: st.store ? 0 : 32, smemReads:0};
+    },
+    inspect(st, w, lane){
+      const row = kind === 1 ? lane : w, col = kind === 1 ? w : lane;
+      return `threadIdx = (x=${lane}, y=${w}) → <code>out_row=${row}</code>, <code>out_col=${col}</code><br>` +
+        (st.store ? `writes <code>matC[${row}, ${col}]</code>` :
+        `reads <code>matA[${row}, ${st.i}]</code> (byte offset ${(row*K+st.i)*4}) and <code>matB[${st.i}, ${col}]</code> (byte offset ${(st.i*N+col)*4})`);
+    }
+  };
+}
+
+const kernel3 = {
+  name: '3 · shared-memory tiles',
+  blurb: 'Same thread layout as kernel 2 (warp w = row w of the block\'s C tile), but K is walked in 32-wide tiles. <b>Phase 1:</b> each thread copies one element of A and one of B into shared memory — warp w copies row w of each tile, fully coalesced (4 + 4 sectors). <b>Sync.</b> <b>Phase 2:</b> 32 multiply-adds, all operands from shared memory: <code>tileA[ty,i]</code> is a broadcast, <code>tileB[i,tx]</code> is a conflict-free row. Each FMA costs <b>2 shared-memory reads</b> → MIO throttle. Drag <b>tile t</b> to 37 to see the zero-fill: K = 1200 is not a multiple of 32, so the last tile has 16 out-of-bounds columns.',
+  numWarps: 32, tiled: true,
+  code: [
+    'for t in range(num_tiles):              # 38 tiles',
+    '  tile_offset = t * tile_dim',
+    '  tileA[ty, tx] = matA[out_row, tile_offset + tx]  # else 0.0',
+    '  tileB[ty, tx] = matB[tile_offset + ty, out_col]  # else 0.0',
+    '  cuda.syncthreads()',
+    '  for i in range(tile_dim):',
+    '    product += tileA[ty, i] * tileB[i, tx]',
+    '  cuda.syncthreads()',
+    'matC[out_row, out_col] = product        # once, after all tiles'],
+  steps: [{label:'phase 1: copy gmem → smem', line:[2,3], load:true},
+          {label:'sync', line:4, sync:true},
+          ...range(32).map(i => ({label:`phase 2: i = ${i}`, line:6, i})),
+          {label:'sync', line:7, sync:true, post:true},
+          {label:'store C (after tile 37)', line:8, store:true}],
+  owner: (r, c) => r,
+  window: t => ({A:{r0:0, c0:t*T}, B:{r0:t*T, c0:0}}),
+  capA: 'Rows = block rows 0–31; columns = this tile\'s k range. Hatched = past k = 1200.',
+  capB: 'Rows = this tile\'s k range; columns = block cols 0–31. Hatched = past k = 1200.',
+  capC: 'Tint = owning warp (rows, as in kernel 2). Partial sums stay in the register <code>product</code> across all tiles.',
+  frame(st, w, t){
+    const m = [], off = t*T;
+    for (const lane of range(32)){
+      const tx = lane, ty = w;
+      if (st.load){
+        const okA = off + tx < K, okB = off + ty < K;
+        if (okA) m.push({p:'A', r:ty, c:off+tx, s:'ld', lane, ins:'ldA'});
+        m.push({p:'tA', r:ty, c:tx, s: okA ? 'ld' : 'zero', lane, ins:'stA'});
+        if (okB) m.push({p:'B', r:off+ty, c:tx, s:'ld', lane, ins:'ldB'});
+        m.push({p:'tB', r:ty, c:tx, s: okB ? 'ld' : 'zero', lane, ins:'stB'});
+        m.push({p:'C', r:ty, c:tx, s:'acc', lane});
+      } else if (st.i !== undefined){
+        m.push({p:'tA', r:ty, c:st.i, s:'ld', lane, ins:'rdA'});
+        m.push({p:'tB', r:st.i, c:tx, s:'ld', lane, ins:'rdB'});
+        m.push({p:'C', r:ty, c:tx, s:'acc', lane});
+      } else if (st.store){
+        m.push({p:'C', r:ty, c:tx, s:'st', lane, ins:'stC'});
+      } else {
+        m.push({p:'C', r:ty, c:tx, s:'acc', lane});
+      }
+    }
+    return {marks:m, fma: st.i !== undefined ? 32 : 0, smemReads: st.i !== undefined ? 2 : 0, fmaPerThread: 1};
+  },
+  inspect(st, w, lane, t){
+    const off = t*T;
+    let s = `(tx=${lane}, ty=${w}) → <code>out_row=${w}</code>, <code>out_col=${lane}</code><br>`;
+    if (st.load) s += `copies <code>matA[${w}, ${off+lane}]</code> → <code>tileA[${w}, ${lane}]</code>${off+lane>=K?' <b>(zero-fill)</b>':''}<br>and <code>matB[${off+w}, ${lane}]</code> → <code>tileB[${w}, ${lane}]</code>${off+w>=K?' <b>(zero-fill)</b>':''}`;
+    else if (st.i !== undefined) s += `<code>product += tileA[${w}, ${st.i}] * tileB[${st.i}, ${lane}]</code> — k = ${off+st.i}`;
+    else if (st.store) s += `writes <code>matC[${w}, ${lane}]</code> once`;
+    else s += 'waiting at the barrier';
+    return s;
+  }
+};
+
+const BM = 32, BN = 32, BK = 32, TM = 8, NT = BM*BN/TM; // 128
+const kernel4 = {
+  name: '4 · 1D block tiling',
+  blurb: 'Block = <b>128 threads in 1-D</b> (4 warps). <code>thread_col = tid % 32</code>, <code>thread_row_base = (tid // 32) * 8</code>, so <b>warp w owns C rows 8w … 8w+7</b> and each lane owns an <b>8-tall strip of one column</b> (8 register accumulators). Loading is strided: 128 threads fill 1,024 tile slots, 8 each; on load pass j, warp w copies tile row <code>w + 4j</code> (still coalesced). In phase 2, each thread reads <code>tileB[dot_k, thread_col]</code> <b>once</b> into <code>b_val</code> and reuses it for 8 FMAs → 9 shared reads per 8 FMAs = <b>1.125</b> instead of 2. That is what kills the MIO throttle.',
+  numWarps: 4, tiled: true,
+  code: [
+    'tid = threadIdx.x; thread_col = tid % BN; thread_row_base = (tid // BN) * TM',
+    'for bk_offset in range(0, k, BK):',
+    '  for idx in range(tid, BM*BK, NT):        # load_tileA, 8 passes',
+    '    tileA[idx//BK, idx%BK] = matA[block_row + idx//BK, bk_offset + idx%BK]',
+    '  for idx in range(tid, BK*BN, NT):        # load_tileB, 8 passes',
+    '    tileB[idx//BN, idx%BN] = matB[bk_offset + idx//BN, block_col + idx%BN]',
+    '  cuda.syncthreads()',
+    '  for dot_k in range(BK):',
+    '    b_val = tileB[dot_k, thread_col]       # 1 read, reused 8×',
+    '    for tm in range(TM):',
+    '      thread_results[tm] += tileA[thread_row_base + tm, dot_k] * b_val',
+    '  cuda.syncthreads()',
+    'for tm in range(TM): matC[block_row + thread_row_base + tm, block_col + thread_col] = thread_results[tm]'],
+  steps: [...range(8).map(j => ({label:`load_tileA pass j = ${j}`, line:[2,3], la:j})),
+          ...range(8).map(j => ({label:`load_tileB pass j = ${j}`, line:[4,5], lb:j})),
+          {label:'sync', line:6, sync:true},
+          ...range(32).map(k => ({label:`phase 2: dot_k = ${k}`, line:[8,9,10], dk:k})),
+          {label:'sync', line:11, sync:true, post:true},
+          {label:'store C (after last tile)', line:12, store:true}],
+  owner: (r, c) => Math.floor(r / TM),
+  window: t => ({A:{r0:0, c0:t*BK}, B:{r0:t*BK, c0:0}}),
+  capA: 'Rows = block rows 0–31; columns = this tile\'s k range. Hatched = past k = 1200.',
+  capB: 'Rows = this tile\'s k range; columns = block cols 0–31. Hatched = past k = 1200.',
+  capC: 'Tint = owning warp: 4 bands of 8 rows. Each lane holds 8 accumulators in registers (<code>cuda.local.array(TM)</code>).',
+  frame(st, w, t){
+    const m = [], off = t*BK;
+    for (const lane of range(32)){
+      const tid = 32*w + lane, col = tid % BN, rb = Math.floor(tid / BN) * TM;
+      const own = s => { for (const tm of range(TM)) m.push({p:'C', r:rb+tm, c:col, s, lane, ins: s === 'st' ? 'stC'+tm : null}); };
+      if (st.la !== undefined || st.lb !== undefined){
+        const j = st.la ?? st.lb, idx = tid + NT*j, r = Math.floor(idx / 32), c = idx % 32;
+        // slots this lane already filled on earlier passes stay visible (no lane tag → no outline, not counted)
+        const done = (p, n) => { for (let jj = 0; jj < n; jj++) m.push({p, r: Math.floor((tid + NT*jj) / 32), c, s:'done'}); };
+        if (st.la !== undefined) done('tA', j); else { done('tA', 8); done('tB', j); }
+        if (st.la !== undefined){
+          const ok = off + c < K;
+          if (ok) m.push({p:'A', r, c:off+c, s:'ld', lane, ins:'ldA'});
+          m.push({p:'tA', r, c, s: ok ? 'ld' : 'zero', lane, ins:'stA'});
+        } else {
+          const ok = off + r < K;
+          if (ok) m.push({p:'B', r:off+r, c, s:'ld', lane, ins:'ldB'});
+          m.push({p:'tB', r, c, s: ok ? 'ld' : 'zero', lane, ins:'stB'});
+        }
+        own('acc');
+      } else if (st.dk !== undefined){
+        m.push({p:'tB', r:st.dk, c:col, s:'ld', lane, ins:'rdB'});
+        for (const tm of range(TM)) m.push({p:'tA', r:rb+tm, c:st.dk, s:'ld', lane, ins:'rdA'+tm});
+        own('acc');
+      } else own(st.store ? 'st' : 'acc');
+    }
+    return {marks:m, fma: st.dk !== undefined ? 32*TM : 0, smemReads: st.dk !== undefined ? 1 + TM : 0, fmaPerThread: TM};
+  },
+  inspect(st, w, lane, t){
+    const tid = 32*w + lane, col = tid % BN, rb = Math.floor(tid / BN) * TM, off = t*BK;
+    let s = `<code>tid=${tid}</code> (warp ${w}, lane ${lane}) → <code>thread_col=${col}</code>, <code>thread_row_base=${rb}</code><br>owns C rows ${rb}–${rb+7}, column ${col} (8 accumulators)<br>`;
+    if (st.la !== undefined || st.lb !== undefined){
+      const j = st.la ?? st.lb, idx = tid + NT*j, r = Math.floor(idx/32), c = idx%32;
+      s += `pass ${j}: <code>idx = ${tid} + 128·${j} = ${idx}</code> → <code>(r, c) = (${idx}//32, ${idx}%32) = (${r}, ${c})</code><br>`;
+      s += st.la !== undefined ? `copies <code>matA[${r}, ${off+c}]</code> → <code>tileA[${r}, ${c}]</code>${off+c>=K?' <b>(zero-fill)</b>':''}`
+                               : `copies <code>matB[${off+r}, ${c}]</code> → <code>tileB[${r}, ${c}]</code>${off+r>=K?' <b>(zero-fill)</b>':''}`;
+      s += `<br>its 8 passes cover tile rows ${range(8).map(j => Math.floor((tid+NT*j)/32)).join(', ')}`;
+    } else if (st.dk !== undefined){
+      s += `<code>b_val = tileB[${st.dk}, ${col}]</code>, then 8 FMAs with <code>tileA[${rb}…${rb+7}, ${st.dk}]</code>`;
+    } else if (st.store) s += `writes <code>matC[${rb}…${rb+7}, ${col}]</code> (8 stores; each is coalesced across the warp)`;
+    else s += 'waiting at the barrier';
+    return s;
+  }
+};
+
+/* ---------- Kernels 5–7 (Lecture 10): 2D patches, warp tiling, factory ----------
+   cfg = (BM, BN, BK, WM, WN, TM, TN). id 5: flat tid→patch map, tileA [BM,BK], scalar strided loads.
+   id 6/7: warp → WM×WN region → lane patch, tileA stored TRANSPOSED [BK,BM], loads in groups of 4 floats. */
+const CANDIDATES = [
+  [64,64,8,16,32,4,4], [64,64,16,16,32,4,4], [64,64,32,16,32,4,4], [64,64,16,32,32,8,4], [64,64,32,32,32,8,4],
+  [64,128,16,16,32,4,4], [64,128,32,16,32,4,4], [64,128,16,32,32,8,4],
+  [128,128,8,32,64,8,8], [128,128,16,32,64,8,8], [128,128,32,32,64,8,8]];
+function isValidConfig(BM, BN, BK, WM, WN, TM, TN){ // same rules, same order as is_valid_config in matmul-07.py
+  if (BK % 4 || BN % 4 || TM % 4 || TN % 4) return 'BK, BN, TM, TN must be multiples of 4';
+  if (BM % WM || BN % WN || WM % TM || WN % TN) return 'tiles must partition exactly';
+  if ((WM / TM) * (WN / TN) !== 32) return 'warp region must hold exactly 32 patches';
+  const nt = (BM / TM) * (BN / TN);
+  if (nt % 32 || nt < 32 || nt > 1024) return 'thread count must be whole warps, ≤ 1024';
+  if (TM * TN + TM + TN > 255) return 'register estimate > 255';
+  if ((BM + BN) * BK * 4 > 48 * 1024) return 'shared tiles > 48 KiB';
+  return true;
+}
+function warpTiled(cfg, id){
+  const [BM, BN, BK, WM, WN, TM, TN] = cfg, NT = (BM / TM) * (BN / TN), NW = NT / 32, KK = 1024;
+  const flat = id === 5, fdiv = (a, b) => Math.floor(a / b);
+  const map = tid => {
+    if (flat){ const ppr = BN / TN; return {r: fdiv(tid, ppr) * TM, c: (tid % ppr) * TN, pgr: fdiv(tid, ppr), pgc: tid % ppr}; }
+    const w = fdiv(tid, 32), l = tid % 32, wpr = BN / WN, pw = WN / TN;
+    const wr = fdiv(w, wpr) * WM, wc = (w % wpr) * WN;
+    return {r: wr + fdiv(l, pw) * TM, c: wc + (l % pw) * TN, wr, wc, pr: fdiv(l, pw) * TM, pc: (l % pw) * TN};
+  };
+  const ownerGrid = range(BM).map(() => new Array(BN).fill(0));
+  for (let tid = 0; tid < NT; tid++){ const o = map(tid); for (let i = 0; i < TM; i++) for (let j = 0; j < TN; j++) ownerGrid[o.r+i][o.c+j] = fdiv(tid, 32); }
+  // Loads return tile-local cells: g = [row, col] inside the A (BM×BK) or B (BK×BN) tile window, t = [row, col] in shared memory.
+  const GA = flat ? BM * BK : BM * BK / 4, GB = flat ? BK * BN : BK * BN / 4;
+  const PA = Math.ceil(GA / NT), PB = Math.ceil(GB / NT);
+  const loadA = (tid, j) => {
+    const i = tid + NT * j; if (i >= GA) return [];
+    if (flat){ const r = fdiv(i, BK), c = i % BK; return [{g:[r, c], t:[r, c], s:0, i}]; }
+    const r = fdiv(i, BK / 4), c = (i % (BK / 4)) * 4;
+    return range(4).map(s => ({g:[r, c+s], t:[c+s, r], s, i}));
+  };
+  const loadB = (tid, j) => {
+    const i = tid + NT * j; if (i >= GB) return [];
+    if (flat){ const r = fdiv(i, BN), c = i % BN; return [{g:[r, c], t:[r, c], s:0, i}]; }
+    const r = fdiv(i, BN / 4), c = (i % (BN / 4)) * 4;
+    return range(4).map(s => ({g:[r, c+s], t:[r, c+s], s, i}));
+  };
+  const code = flat ? [
+    'tid = threadIdx.x                        # 256 threads, 1-D',
+    'patch_row = (tid // (BN//TN)) * TM; patch_col = (tid % (BN//TN)) * TN',
+    'product = cuda.local.array((TM, TN))     # never zeroed in the source!',
+    'for bk_offset in range(0, k, BK):        # 64 chunks of 16',
+    '  for i in range(tid, BM*BK, NT):        # load_tileA: 4 passes',
+    '    tileA[i//BK, i%BK] = matA[block_row + i//BK, bk_offset + i%BK]',
+    '  for i in range(tid, BK*BN, NT):        # load_tileB: 4 passes',
+    '    tileB[i//BN, i%BN] = matB[bk_offset + i//BN, block_col + i%BN]',
+    '  cuda.syncthreads()',
+    '  for dot_k in range(BK):',
+    '    for i in range(TM): regM[i] = tileA[patch_row + i, dot_k]',
+    '    for j in range(TN): regN[j] = tileB[dot_k, patch_col + j]',
+    '    for i, j: product[i, j] += regM[i] * regN[j]   # 16 FMAs',
+    '  cuda.syncthreads()',
+    'for i, j: matC[block_row + patch_row + i, block_col + patch_col + j] = product[i, j]'] : [
+    'warp_id = tid // 32; lane_id = tid % 32',
+    'warp_row = (warp_id // (BN//WN)) * WM; warp_col = (warp_id % (BN//WN)) * WN',
+    'row = warp_row + (lane_id // (WN//TN)) * TM; col = warp_col + (lane_id % (WN//TN)) * TN',
+    id === 6 ? 'product = cuda.local.array((TM, TN))     # never zeroed in the source!'
+             : 'thread_results = local.array((TM, TN)); all set to 0.0',
+    'for bk_offset in range(0, k, BK):',
+    '  for i in range(tid, BM*BK//4, NT):     # A: groups of 4, stored TRANSPOSED',
+    '    r = i // (BK//4); c = (i % (BK//4)) * 4',
+    '    tileA[c+0..3, r] = matA[block_row + r, bk_offset + c+0..3]   # 4 scalar stmts',
+    '  for i in range(tid, BK*BN//4, NT):     # B: groups of 4',
+    '    r = i // (BN//4); c = (i % (BN//4)) * 4',
+    '    tileB[r, c+0..3] = matB[bk_offset + r, block_col + c+0..3]',
+    '  cuda.syncthreads()',
+    '  for dot_k in range(BK):',
+    '    regM[0..TM-1] = tileA[dot_k, row + 0..TM-1]   # adjacent (transposed)',
+    '    regN[0..TN-1] = tileB[dot_k, col + 0..TN-1]',
+    `    for i, j: acc[i, j] += regM[i] * regN[j]     # ${TM*TN} FMAs`,
+    '  cuda.syncthreads()',
+    'for i, j: matC[block_row + row + i, block_col + col + j] = acc[i, j]'];
+  const L = flat ? {la:[4,5], lb:[6,7], sync:8, dk:[9,10,11,12], post:13, store:14} : {la:[5,6,7], lb:[8,9,10], sync:11, dk:[12,13,14,15], post:16, store:17};
+  const steps = [...range(PA).map(j => ({label:`load_tileA pass j = ${j}`, line:L.la, la:j})),
+                 ...range(PB).map(j => ({label:`load_tileB pass j = ${j}`, line:L.lb, lb:j})),
+                 {label:'sync', line:L.sync, sync:true},
+                 ...range(BK).map(k => ({label:`phase 2: dot_k = ${k}`, line:L.dk, dk:k})),
+                 {label:'sync', line:L.post, sync:true, post:true},
+                 {label:'store C (after last chunk)', line:L.store, store:true}];
+  const accName = id === 7 ? 'thread_results' : 'product';
+  const valid = isValidConfig(...cfg), smemB = (BM + BN) * BK * 4, regEst = TM*TN + TM + TN;
+  const name = id === 5 ? '5 · 2D block tiling' : id === 6 ? '6 · warp tiling' : '7 · kernel factory';
+  const tAdims = flat ? {rows: BM, cols: BK} : {rows: BK, cols: BM};
+  const blurb = {
+    5: 'Block = <b>256 threads</b> (8 warps) for a <b>64×64</b> C tile. Each thread owns a <b>4×4 patch</b> (16 accumulators): <code>patch_grid_row = tid // 16</code>, <code>patch_grid_col = tid % 16</code>, so tid 91 owns C[20–23, 44–47] and warp w covers C rows 8w…8w+7 across all 64 columns. <b>Loading is a separate job</b> from ownership: on pass j, tid loads tileA slot <code>(tid+256j)//16, %16</code> and tileB slot <code>//64, %64</code>. Phase 2 is an <b>outer product</b>: 4 tileA values and 4 tileB values feed 16 FMAs → <b>0.5 shared reads per FMA</b> (kernel 4: 1.125). The cost shows up in the wavefront count: lanes 0–15 and 16–31 read tileA rows 4 apart (64 floats, same bank), and tileB columns c and c+32 share a bank → <b>2-way bank conflicts</b>.',
+    6: 'Same 64×64 block, 256 threads and 4×4 patches, with a <b>warp tier</b> added: the 8 warps tile the block 4 down × 2 across, each owning a <b>16×32 region</b>; inside it, lanes form 4 rows of 8 patches. C[21,45] moves from tid 91 (kernel 5) to <b>tid 107</b> — same output, different owner. <b>tileA is stored transposed</b> (<code>tileA[q, r]</code>), so a thread\'s 4 A operands are adjacent. Loads move <b>groups of 4 neighbouring floats</b> (here exactly one group per thread per matrix). Result in the bank model: the compute reads become <b>conflict-free</b>, but the grouped scalar <b>stores</b> are 4-way in <b>both</b> tiles — in tileA because the 4 lanes that share a source row r all write column r of the transposed tile (bank r mod 32), in tileB because neighbouring lanes write words 4 apart. Whether the 4 scalar statements become one 128-bit load is a compiler question — check the SASS before claiming it.',
+    7: 'The host <b>factory</b> <code>make_kernel(BM, BN, BK, WM, WN, TM, TN)</code> closes over one tuple and returns a specialised kernel plus its thread count; <code>is_valid_config</code> filters candidates, and the script times all 11 and keeps the fastest. The device code is kernel 6\'s algorithm (transposed tileA, groups of 4), with the accumulators <b>explicitly zeroed</b>. Pick a config to see how the shape changes ownership, load passes, idle threads and shared reads per FMA: <b>(TM+TN)/(TM·TN)</b> = 0.5 for 4×4, 0.375 for 8×4, 0.25 for 8×8. No config is marked fastest here — that is a measurement on your GPU.'}[id];
+  const meta = `M = N = K = 1024, fp32 · (BM, BN, BK, WM, WN, TM, TN) = (${cfg.join(', ')}) · NT = ${NT} threads (${NW} warps) · shared = (BM+BN)·BK·4 = ${smemB.toLocaleString()} B · register estimate TM·TN+TM+TN = ${regEst} · ${KK/BK} chunks` +
+    (id === 7 ? ` · is_valid_config: ${valid === true ? '✓ passes' : '✗ ' + valid}` : '') +
+    (GA < NT ? ` · A has only ${GA} groups for ${NT} threads: warps ${GA/32}–${NW-1} idle while loading A` : '') +
+    (GB < NT ? ` · B has only ${GB} groups: warps ${GB/32}–${NW-1} idle while loading B` : '');
+  return {
+    name, blurb, meta, cfg, id, numWarps: NW, tiled: true, code, steps,
+    prob: {M: KK, N: KK, K: KK}, BK, numTiles: KK / BK,
+    geo: {C:{rows:BM, cols:BN}, A:{rows:BM, cols:BK}, B:{rows:BK, cols:BN}, tA: tAdims, tB:{rows:BK, cols:BN}},
+    owner: (r, c) => ownerGrid[r][c],
+    window: t => ({A:{r0:0, c0:t*BK}, B:{r0:t*BK, c0:0}}),
+    oob: {A: () => false, B: () => false},
+    capA: `Rows = block rows 0–${BM-1}; columns = this chunk's k range (${BK} wide). Rows are 4,096 bytes apart.`,
+    capB: `Rows = this chunk's k range; columns = block cols 0–${BN-1}.`,
+    capC: flat ? 'Tint = owning warp: 8 bands of 8 rows (two rows of 16 patches each). Each lane owns a 4×4 patch = 16 accumulators.'
+               : `Tint = owning warp: ${BM/WM} × ${BN/WN} warp regions of ${WM}×${WN}. Each lane owns a ${TM}×${TN} patch = ${TM*TN} accumulators.`,
+    capTA: flat ? 'tileA[BM, BK] = 64×16 floats, row-major. Bank = (row·16 + col) mod 32, so rows r and r+2 share banks.'
+                : `tileA[BK, BM] = ${BK}×${BM} floats — <b>transposed</b>: A[r, q] lands at tileA[q, r]. Bank = (q·${BM} + r) mod 32 = r mod 32.`,
+    capTB: `tileB[BK, BN] = ${BK}×${BN} floats, row-major. Bank = col mod 32, so columns c and c+32 share a bank.`,
+    frame(st, w, t){
+      const m = [], off = t * BK;
+      for (const lane of range(32)){
+        const tid = 32*w + lane, o = map(tid);
+        const own = s => { for (let i = 0; i < TM; i++) for (let j = 0; j < TN; j++) m.push({p:'C', r:o.r+i, c:o.c+j, s, lane, ins: s === 'st' ? `stC${i}_${j}` : null}); };
+        if (st.la !== undefined || st.lb !== undefined){
+          const isA = st.la !== undefined, j = isA ? st.la : st.lb;
+          const done = (fn, p, n) => { for (let jj = 0; jj < n; jj++) for (const x of fn(tid, jj)) m.push({p, r:x.t[0], c:x.t[1], s:'done'}); };
+          if (isA) done(loadA, 'tA', j); else { done(loadA, 'tA', PA); done(loadB, 'tB', j); }
+          for (const x of (isA ? loadA : loadB)(tid, j)){
+            if (isA) m.push({p:'A', r:x.g[0], c:off + x.g[1], s:'ld', lane, ins:'ldA'+x.s});
+            else     m.push({p:'B', r:off + x.g[0], c:x.g[1], s:'ld', lane, ins:'ldB'+x.s});
+            m.push({p: isA ? 'tA' : 'tB', r:x.t[0], c:x.t[1], s:'ld', lane, ins:(isA ? 'stA' : 'stB')+x.s});
+          }
+          own('acc');
+        } else if (st.dk !== undefined){
+          for (let i = 0; i < TM; i++) m.push(flat ? {p:'tA', r:o.r+i, c:st.dk, s:'ld', lane, ins:'rdA'+i} : {p:'tA', r:st.dk, c:o.r+i, s:'ld', lane, ins:'rdA'+i});
+          for (let j = 0; j < TN; j++) m.push({p:'tB', r:st.dk, c:o.c+j, s:'ld', lane, ins:'rdB'+j});
+          own('acc');
+        } else own(st.store ? 'st' : 'acc');
+      }
+      return {marks:m, fma: st.dk !== undefined ? 32*TM*TN : 0, smemReads: st.dk !== undefined ? TM + TN : 0, fmaPerThread: TM*TN};
+    },
+    inspect(st, w, lane, t){
+      const tid = 32*w + lane, o = map(tid), off = t * BK;
+      let s = `<code>tid=${tid}</code> (warp ${w}, lane ${lane}) → ` +
+        (flat ? `patch grid (${o.pgr}, ${o.pgc})` : `warp origin (${o.wr}, ${o.wc}) + patch (${o.pr}, ${o.pc})`) +
+        `<br>owns <code>C[${o.r}–${o.r+TM-1}, ${o.c}–${o.c+TN-1}]</code> (${TM*TN} accumulators)<br>`;
+      if (st.la !== undefined || st.lb !== undefined){
+        const isA = st.la !== undefined, j = isA ? st.la : st.lb, xs = (isA ? loadA : loadB)(tid, j), i = tid + NT*j;
+        if (!xs.length) s += `pass ${j}: <code>i = ${tid} + ${NT}·${j} = ${i}</code> ≥ ${isA ? GA : GB} ${flat ? 'slots' : 'groups'} → <b>no work</b> this pass`;
+        else {
+          s += `pass ${j}: <code>i = ${tid} + ${NT}·${j} = ${i}</code><br>` + xs.map(x => isA
+            ? `<code>matA[${x.g[0]}, ${off+x.g[1]}] → tileA[${x.t[0]}, ${x.t[1]}]</code>`
+            : `<code>matB[${off+x.g[0]}, ${x.g[1]}] → tileB[${x.t[0]}, ${x.t[1]}]</code>`).join('<br>');
+          const cover = range(isA ? PA : PB).map(jj => (isA ? loadA : loadB)(tid, jj)[0]).filter(Boolean).map(x => isA ? `(${x.g[0]}, ${x.g[1]})` : `(${x.g[0]}, ${x.g[1]})`);
+          s += `<br>this thread's ${isA ? 'A' : 'B'} ${flat ? 'slots' : 'groups'} over all passes (tile-local row, col): ${cover.join(', ')}`;
+        }
+      } else if (st.dk !== undefined){
+        s += `k = ${off + st.dk}: <code>regM = tileA[${flat ? `${o.r}…${o.r+TM-1}, ${st.dk}` : `${st.dk}, ${o.r}…${o.r+TM-1}`}]</code>, <code>regN = tileB[${st.dk}, ${o.c}…${o.c+TN-1}]</code><br>then ${TM*TN} FMAs <code>${accName}[i, j] += regM[i] * regN[j]</code>`;
+      } else if (st.store) s += `writes <code>matC[${o.r}…${o.r+TM-1}, ${o.c}…${o.c+TN-1}]</code> (${TM*TN} scalar stores, no edge guard)`;
+      else s += 'waiting at the barrier';
+      return s;
+    },
+    regs(st, t){
+      const kd = kDone(this, st, t), live = st.dk !== undefined;
+      const acc = st.store ? 'st' : live ? 'acc' : 'hold';
+      return {
+        names: [...range(TM).map(i => `regM[${i}]`), ...range(TN).map(j => `regN[${j}]`), ...range(TM).map(i => `${accName === 'product' ? 'product' : 'results'}[${i}, 0–${TN-1}]`)],
+        styles: [...range(TM + TN).map(() => live ? 'ld' : 'idle'), ...range(TM).map(() => acc)],
+        values: [...range(TM).map(() => live ? 2 : null), ...range(TN).map(() => live ? 3 : null), ...range(TM).map(() => 6*kd)],
+        cap: `${TM}+${TN} operand registers plus ${TM}×${TN} accumulators per lane (each accumulator row stands for ${TN} registers) = TM·TN+TM+TN = ${regEst}, the source's estimate; the compiler adds indices and may spill. At each dot_k the ${TM+TN} operands are loaded once and feed ${TM*TN} FMAs.` +
+          (id === 7 ? ' Accumulators start at 0.0 explicitly.' : ' <b>The source never zeroes the accumulators</b>; values shown assume that fix.')
+      };
+    },
+    note(st){
+      if (st.la !== undefined || st.lb !== undefined) return flat
+        ? 'Scalar strided load: on pass j each lane copies slot tid + 256·j. A warp covers 32 consecutive slots: 2 rows of the 16-wide A tile (4 sectors), or half a row of the 64-wide B tile (4 sectors).'
+        : `Each lane copies 4 neighbouring floats with 4 scalar statements. Per statement the warp touches several sectors, but the 4 statements share them, so the distinct sectors are fully used. Shared-store conflicts (wavefronts above): in tileA, the ${BK/4} lanes that share a source row r all write column r of the transposed tile, so they hit bank r mod 32; in tileB, neighbouring lanes write words 4 apart.`;
+      if (st.dk !== undefined) return `${TM} tileA reads + ${TN} tileB reads per lane feed ${TM*TN} FMAs: ${(TM+TN)/(TM*TN)} shared reads per FMA.` +
+        (flat ? ' Wavefronts > 1 are bank conflicts: 2 distinct addresses on one bank.' : ' Lanes that share a patch row (or column) read the same address, which is a multicast, not a conflict.' + (WN > 32 ? ` But this warp region is ${WN} columns wide, so tileB columns c and c+32 share a bank: a 2-way conflict on the regN reads.` : ''));
+      if (st.store) return `${TM*TN} store instructions per lane. Each touches ${flat ? '2 rows × 16 floats spread over 64 columns' : `${32/(WN/TN)} rows × ${WN/TN} floats spread over ${WN} columns`}, so sectors are only partly used — no shared-memory staging of C here.`;
+      return '';
+    }
+  };
+}
+
+/* ---------- Tensor Cores (Lecture 12): WMMA ----------
+   The portable WMMA API does not say which lane holds which fragment element, so these marks carry no lane. */
+const tc01 = {
+  name: 'TC-01 · one warp, one WMMA',
+  meta: 'M = N = K = 16 · A, B half (fp16), C float · grid = 1 block × 32 threads = one warp · A = 2.0, B = 3.0 → every C = 16·2·3 = 96',
+  blurb: 'One warp computes one 16×16×16 matrix multiply-accumulate with <b>warp-collective</b> calls. There is no <code>threadIdx</code> in the kernel: all 32 lanes execute the same <code>load_matrix_sync</code>, <code>mma_sync</code> and <code>store_matrix_sync</code> with identical arguments, and together they hold the fragments. <b>Which lane holds which element is not specified</b> by the WMMA API, so the panels show the warp as a whole. Note the layouts: A is <code>row_major</code> (A[r,q] at a[r·16+q]); B is declared <code>col_major</code> (B[q,c] at b[c·16+q]), so each 32-byte sector of B is one <b>column</b>. With every B element equal to 3.0, the col_major choice cannot change the result — a uniform smoke test can\'t catch a layout mix-up.',
+  numWarps: 1, tiled: false, collective: true,
+  prob: {M:16, N:16, K:16}, BK: 16, numTiles: 1,
+  geo: {C:{rows:16, cols:16}, A:{rows:16, cols:16, eb:2}, B:{rows:16, cols:16, eb:2, colMajor:true}},
+  code: [
+    'wmma::fragment<matrix_a, 16,16,16, half, row_major> a_frag;',
+    'wmma::fragment<matrix_b, 16,16,16, half, col_major> b_frag;',
+    'wmma::fragment<accumulator, 16,16,16, float> c_frag;',
+    '// launched <<<1, 32>>>: one warp, no threadIdx used',
+    'wmma::fill_fragment(c_frag, 0.0f);',
+    'wmma::load_matrix_sync(a_frag, a, K);   // A[r,q] at a[r*16 + q]',
+    'wmma::load_matrix_sync(b_frag, b, K);   // B[q,c] at b[c*16 + q]',
+    'wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);   // c = a·b + c',
+    'wmma::store_matrix_sync(c, c_frag, N, wmma::mem_row_major);'],
+  steps: [{label:'fill_fragment(c_frag, 0)', line:[0,1,2,4], fill:true},
+          {label:'load_matrix_sync(a_frag)', line:5, la:true},
+          {label:'load_matrix_sync(b_frag)', line:6, lb:true},
+          {label:'mma_sync', line:7, mma:true},
+          {label:'store_matrix_sync', line:8, store:true}],
+  owner: () => 0,
+  window: () => ({A:{r0:0, c0:0}, B:{r0:0, c0:0}}),
+  oob: {A: () => false, B: () => false},
+  capA: 'A[16,16], half, row-major: one 16-element row = 32 bytes = one sector.',
+  capB: 'B[16,16] drawn as B[q, c], but stored <b>column-major</b>: one column = 32 bytes = one sector (outlines are vertical).',
+  capC: 'C[16,16], float, row-major. The whole tile belongs to the one warp; no lane owns a named cell.',
+  frame(st){ return tcFrame(this, st, 0, 0, {bx:0, by:0}); },
+  inspect(st, w, lane){ return tcInspect(this, st, w, lane, 0, {bx:0, by:0}); },
+  regs(st){ return tcRegs(this, st, 0, 0, {bx:0, by:0}); },
+  note(st){
+    if (st.la || st.lb) return 'One collective load moves a 16×16 half tile: 16 sectors, 512 bytes, all used. How the hardware splits that into instructions is architecture-dependent.';
+    if (st.mma) return 'One mma_sync = 16·16·16 = 4,096 multiply-adds for the warp. That is not a claim of one machine instruction or one Tensor Core.';
+    if (st.store) return 'Row-major float store: 16 rows × 64 bytes = 32 sectors. The host then checks only h_c[0] == 96.';
+    return 'fill_fragment zeroes the accumulator; mma_sync computes a·b + c, so c must start at 0.';
+  }
+};
+const TC2 = {M:1200, N:800, K:1000, pM:1200, pN:800, pK:1008, WPB:4};
+const tc02 = {
+  name: 'TC-02 · any size by padding',
+  meta: 'M = 1200, N = 800, K = 1000 → padded pad_M = 1200, pad_N = 800, pad_K = 1008 · blockDim = (32, 4): 4 warps · grid = (50, 19) = 950 blocks, 3,800 warp slots, 3,750 real 16×16 tiles · A = 2, B = 3 → every C = 1000·6 = 6000 (the source checks for 300)',
+  blurb: 'Each <b>warp owns one 16×16 C tile</b>: <code>warpM = blockIdx.y·4 + threadIdx.y</code>, <code>warpN = blockIdx.x</code>. It walks K in <b>63 chunks of 16</b>, loading A and B fragments <b>straight from global memory</b> — no shared-memory staging, so the 4 warps of a block each fetch the <b>same B tile</b> separately (turn on "show all warps"). K = 1000 is not a multiple of 16, so the host pads A to 1008 columns and B to 1008 rows with zeros (<code>cudaMemset</code> + <code>cudaMemcpy2D</code>): drag the chunk to 62 to see 8 real and 8 padded k values. Leading dimensions are the <b>padded row strides</b> (1008 for A, 800 for B and C), not 16. Set blockIdx.y = 18: warp 3 gets row 1200 ≥ pad_M and returns — the <b>whole warp</b> exits together, which is safe because there is no block barrier. One more change from TC-01: <code>b_frag</code> is now declared <code>row_major</code>, read with ldm = pad_N.',
+  numWarps: 4, tiled: true, collective: true, loopStart: 1,
+  prob: {M:1200, N:800, K:1000}, BK: 16, numTiles: 63, blocks: {x:50, y:19},
+  geo: {C:{rows:64, cols:16}, A:{rows:64, cols:16, eb:2}, B:{rows:16, cols:16, eb:2}},
+  code: [
+    'int warpM = blockIdx.y * blockDim.y + threadIdx.y;   // blockDim = (32, 4)',
+    'int warpN = blockIdx.x;',
+    'int row = warpM * 16, col = warpN * 16;',
+    'if (row >= pad_M || col >= pad_N) return;           // whole warp exits',
+    'wmma::fill_fragment(c_frag, 0.0f);',
+    'for (int k = 0; k < pad_K; k += 16) {               // 63 chunks',
+    '  wmma::load_matrix_sync(a_frag, a + row*pad_K + k, pad_K);',
+    '  wmma::load_matrix_sync(b_frag, b + k*pad_N + col, pad_N);',
+    '  wmma::mma_sync(c_frag, a_frag, b_frag, c_frag);',
+    '}',
+    'wmma::store_matrix_sync(c + row*pad_N + col, c_frag, pad_N, mem_row_major);'],
+  steps: [{label:'map warp → tile, fill_fragment(c_frag, 0)', line:[0,1,2,3,4], fill:true},
+          {label:'load_matrix_sync(a_frag)', line:[5,6], la:true},
+          {label:'load_matrix_sync(b_frag)', line:7, lb:true},
+          {label:'mma_sync', line:8, mma:true},
+          {label:'store_matrix_sync (after chunk 62)', line:10, store:true}],
+  owner: (r, c, ctx) => Math.floor((r - ctx.by * 64) / 16),
+  window: (t, ctx) => ({C:{r0:ctx.by*64, c0:ctx.bx*16}, A:{r0:ctx.by*64, c0:t*16}, B:{r0:t*16, c0:ctx.bx*16}}),
+  oob: {C: r => r >= TC2.pM, A: r => r >= TC2.pM, B: () => false},
+  capA: 'A_pad rows of this block (4 warps × 16), columns = this chunk. Rows are pad_K = 1008 halves = 2,016 bytes apart. Grey = zero padding (k ≥ 1000), still fetched.',
+  capB: 'B_pad rows = this chunk, columns = this block\'s 16 output columns; rows are pad_N = 800 halves apart. Grey = zero rows (k ≥ 1000).',
+  capC: 'C rows of this block: 4 warp tiles stacked (threadIdx.y = 0…3). Hatched = past pad_M (warp returned).',
+  frame(st, w, t, ctx){ return tcFrame(this, st, w, t, ctx); },
+  inspect(st, w, lane, t, ctx){ return tcInspect(this, st, w, lane, t, ctx); },
+  regs(st, t, w, ctx){ return tcRegs(this, st, w, t, ctx); },
+  note(st, t){
+    if (st.la) return `A fragment: 16 rows × 32 bytes = 16 sectors, 100% used${t === 62 ? '; the right half of this chunk is padding zeros, fetched like real data' : ''}. Pointer = a + row·1008 + k; leading dimension 1008 (the padded row stride), not 16.`;
+    if (st.lb) return 'B fragment: 16 rows × 32 bytes = 16 sectors. Every warp in the block loads this same tile; without shared memory, reuse across warps relies on L1/L2.';
+    if (st.mma) return '4,096 multiply-adds per warp per chunk, accumulated into the same c_frag (filled once, before the loop).';
+    if (st.store) return 'Row-major float store with leading dimension pad_N = 800: 16 rows × 64 bytes = 32 sectors. cudaMemcpy2D then copies the real M×N rectangle back.';
+    return 'Each warp computes its tile origin from blockIdx and threadIdx.y. All 32 lanes get the same row and col, so the bounds check removes whole warps, never single lanes.';
+  }
+};
+function tcGeom(k, w, t, ctx){ // TC-01 → one tile; TC-02 → warp w's tile in block (bx, by)
+  if (k === tc01) return {row:0, col:0, k0:0, exited:false};
+  const warpM = ctx.by * TC2.WPB + w, row = warpM * 16, col = ctx.bx * 16;
+  return {warpM, row, col, k0: t * 16, exited: row >= TC2.pM || col >= TC2.pN};
+}
+function tcFrame(k, st, w, t, ctx){
+  const g = tcGeom(k, w, t, ctx), m = [];
+  if (g.exited) return {marks:m, fma:0, smemReads:0, exited:true};
+  const realK = k.prob.K;
+  const tile = (p, r0, c0, s, ins, padFn) => { for (let r = 0; r < 16; r++) for (let c = 0; c < 16; c++) m.push({p, r:r0+r, c:c0+c, s: padFn && padFn(r0+r, c0+c) ? 'zero' : s, ins}); };
+  const cS = st.mma ? 'acc' : st.store ? 'st' : 'frag';
+  tile('C', g.row, g.col, cS, st.store ? 'stC' : null);
+  const padA = (r, c) => c >= realK, padB = (r, c) => r >= realK;
+  if (st.la) tile('A', g.row, g.k0, 'ld', 'ldA', padA);
+  if (st.lb){ tile('A', g.row, g.k0, 'frag', null, padA); tile('B', g.k0, g.col, 'ld', 'ldB', padB); }
+  if (st.mma){ tile('A', g.row, g.k0, 'frag', null, padA); tile('B', g.k0, g.col, 'frag', null, padB); }
+  return {marks:m, fma: st.mma ? 4096 : 0, smemReads:0};
+}
+function tcInspect(k, st, w, lane, t, ctx){
+  const g = tcGeom(k, w, t, ctx);
+  let s = '';
+  if (k === tc02){
+    s += `block (${ctx.bx}, ${ctx.by}), threadIdx = (x=${lane}, y=${w}) → <code>warpM = ${ctx.by}·4 + ${w} = ${g.warpM}</code>, <code>warpN = ${ctx.bx}</code> → tile origin <code>(row, col) = (${g.row}, ${g.col})</code><br>`;
+    if (g.exited) return s + `<b><code>row = ${g.row} ≥ pad_M = 1200</code> → return.</b> Every lane of this warp has the same row, so the whole warp leaves; the other warps carry on (no <code>__syncthreads</code> in this kernel).`;
+  }
+  s += `Lane ${lane} joins every call with the same arguments. It holds <b>some</b> elements of each fragment — the WMMA API does not say which, so no cell is outlined for it.<br>`;
+  const kk = g.k0;
+  if (st.la) s += `<code>a + ${g.row}·${k === tc02 ? 1008 : 16} + ${kk} = a + ${g.row*(k === tc02 ? 1008 : 16) + kk}</code> halves (${2*(g.row*(k === tc02 ? 1008 : 16) + kk)} bytes), ldm = ${k === tc02 ? 1008 : 16}` + (k === tc02 && kk + 16 > 1000 ? `<br>k ${kk}–${kk+15}: ${Math.max(0, 1000-kk)} real columns, ${kk+16-Math.max(kk,1000)} zero-padded` : '');
+  else if (st.lb) s += k === tc02 ? `<code>b + ${kk}·800 + ${g.col} = b + ${kk*800 + g.col}</code> halves (${2*(kk*800 + g.col)} bytes), ldm = 800` + (kk + 16 > 1000 ? `<br>k ${kk}–${kk+15}: rows ${Math.max(kk,1000)}–${kk+15} are zero padding` : '') : 'col_major: B[q, c] is read from b[c·16 + q], ldm = 16';
+  else if (st.mma) s += `c_frag += a_frag · b_frag over k ${kk}–${kk+15}: 16 products into each of 256 outputs`;
+  else if (st.store) s += k === tc02 ? `<code>c + ${g.row}·800 + ${g.col} = c + ${g.row*800 + g.col}</code> floats (${4*(g.row*800 + g.col)} bytes), ldm = 800` : 'stores all 256 floats row-major with ldm = 16';
+  else s += 'c_frag = 0 for every element';
+  const ex = k === tc01 ? 'C[5,9] = Σ<sub>q=0..15</sub> A[5,q]·B[q,9] = 16·2·3 = 96' : 'C[21,45] lives in block (2, 0), warp y = 1, tile origin (16, 32), local (5, 13)';
+  return s + `<br><span style="color:var(--dim)">worked example: ${ex}</span>`;
+}
+function tcRegs(k, st, w, t, ctx){
+  const g = tcGeom(k, w, t, ctx), Kreal = k.prob.K;
+  const cap = 'One row per fragment; every lane holds a slice of each. The slice-to-element mapping is unspecified, so all lanes are painted alike. a_frag and b_frag are half; c_frag is float.';
+  if (g.exited) return {names:['a_frag', 'b_frag', 'c_frag'], styles:['idle','idle','idle'], values:[null,null,null], cap: cap + ' This warp has returned.'};
+  const kBefore = Math.min(Kreal, t * 16), kAfter = Math.min(Kreal, (t + 1) * 16);
+  const pad = k === tc02 && t * 16 + 16 > Kreal;
+  const aV = pad ? '2.0 / 0.0 pad' : 2, bV = pad ? '3.0 / 0.0 pad' : 3;
+  if (st.fill) return {names:['a_frag','b_frag','c_frag'], styles:['idle','idle','ld'], values:[null,null,0], cap};
+  if (st.la) return {names:['a_frag','b_frag','c_frag'], styles:['ld', t ? 'hold' : 'idle','hold'], values:[aV, t ? 3 : null, 6*kBefore], cap};
+  if (st.lb) return {names:['a_frag','b_frag','c_frag'], styles:['hold','ld','hold'], values:[aV, bV, 6*kBefore], cap};
+  if (st.mma) return {names:['a_frag','b_frag','c_frag'], styles:['hold','hold','acc'], values:[aV, bV, 6*kAfter], cap};
+  return {names:['a_frag','b_frag','c_frag'], styles:['hold','hold','st'], values:[aV, bV, 6*Kreal], cap};
+}
+
+/* ---------- Defaults for kernels 1–4 ---------- */
+function legacy(k){
+  return Object.assign({
+    prob: {M, N, K}, BK: T, numTiles: NUM_TILES,
+    meta: 'M = 1000, K = 1200, N = 800, fp32 · block (0, 0)',
+    geo: {C:{rows:32, cols:32}, A:{rows:32, cols:32}, B:{rows:32, cols:32}, tA:{rows:32, cols:32}, tB:{rows:32, cols:32}},
+    oob: {A: (r, c) => c >= K, B: r => r >= K},
+    capTA: '32×32 floats; column = bank (row width 32 floats, so bank = col).',
+    capTB: 'Same layout. Reads along a row hit 32 different banks → one wavefront.'
+  }, k);
+}
+const KERNELS = [legacy(naive(1)), legacy(naive(2)), legacy(kernel3), legacy(kernel4),
+                 warpTiled([64,64,16,16,32,4,4], 5), warpTiled([64,64,16,16,32,4,4], 6), warpTiled(CANDIDATES[0], 7),
+                 tc01, tc02];
+const GROUPS = [[0, 'Lecture 8'], [4, 'Lecture 10'], [7, 'Lecture 12']];
+
+/* ---------- Metrics ---------- */
+/* Sector of a global-memory cell: 32 bytes = 8 floats or 16 halves. Every row (or column, for col-major B) in these
+   problems starts on a 32-byte boundary, so a sector never straddles two rows. Returns [key, x, y, w, h] in cell units. */
+function sectorOf(spec, r, c){
+  const S = 32 / (spec.eb || 4);
+  if (spec.colMajor){ const s = Math.floor(r / S); return [c + ',' + s, c, s*S, 1, S]; }
+  const s = Math.floor(c / S); return [r + ',' + s, s*S, r, S, 1];
+}
+function globalStats(marks, panel, spec = {}){
+  const byIns = {};
+  for (const mk of marks) if (mk.p === panel && mk.ins) (byIns[mk.ins] ??= []).push(mk);
+  let sectors = 0, bytesNeeded = 0, instrs = 0, bcast = false;
+  const sectorSet = new Map();
+  for (const list of Object.values(byIns)){
+    instrs++;
+    const addrs = new Set(list.map(x => x.r + ',' + x.c));
+    const secs = new Map(list.map(x => { const s = sectorOf(spec, x.r, x.c); return [s[0], s]; }));
+    secs.forEach((v, key) => sectorSet.set(key, v));
+    sectors += secs.size; bytesNeeded += addrs.size * (spec.eb || 4);
+    if (addrs.size === 1 && list.length > 1) bcast = true;
+  }
+  return {instrs, sectors, distinct: sectorSet.size, bytesNeeded, fetched: sectors * 32, sectorSet, bcast};
+}
+/* Shared memory: 32 banks of 4-byte words; bank = (word address) mod 32. Wavefronts for one instruction =
+   the most distinct addresses any single bank must serve (same address = multicast, free). */
+function smemStats(marks, panel, width = 32){
+  const byIns = {};
+  for (const mk of marks) if (mk.p === panel && mk.ins) (byIns[mk.ins] ??= []).push(mk);
+  let instrs = 0, wavefronts = 0, bcast = 0;
+  for (const list of Object.values(byIns)){
+    instrs++;
+    const bank = {};
+    for (const x of list){ const a = x.r * width + x.c; (bank[a % 32] ??= new Set()).add(a); }
+    wavefronts += Math.max(...Object.values(bank).map(s => s.size));
+    if (new Set(list.map(x => x.r*width + x.c)).size === 1) bcast++;
+  }
+  return {instrs, wavefronts, bcast};
+}
+/* Re-style: an instruction whose 32 lanes all hit one address is a broadcast. */
+function markBroadcasts(marks){
+  const byKey = {};
+  for (const mk of marks) if (mk.ins && mk.s === 'ld' && mk.lane !== undefined) (byKey[mk.p + '|' + mk.ins] ??= []).push(mk);
+  for (const list of Object.values(byKey))
+    if (list.length > 1 && new Set(list.map(x => x.r + ',' + x.c)).size === 1) list.forEach(x => x.s = 'bc');
+}
+
+/* ---------- Drawing ---------- */
+const dpr = window.devicePixelRatio || 1;
+function setup(cv, rows, cols){ const W = cols*CS + 1, H = rows*CS + 1; cv.width = W*dpr; cv.height = H*dpr; cv.style.width = W+'px'; cv.style.height = H+'px'; const g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); return g; }
+function hatch(g, x, y){ g.fillStyle = '#1b1e25'; g.fillRect(x, y, CS, CS); g.strokeStyle = '#3a3f4b'; g.beginPath(); g.moveTo(x, y+CS); g.lineTo(x+CS, y); g.stroke(); }
+
+function drawPanel(cv, opt){
+  const {rows = 32, cols = 32, r0 = 0, c0 = 0, marks, base, spec, oob, lane, sectorSet, others = [], hue} = opt;
+  const g = setup(cv, rows, cols), gap = CS > 4 ? 1 : 0;
+  const inside = (r, c) => r >= 0 && c >= 0 && r < rows && c < cols;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++){
+    const x = c*CS, y = r*CS;
+    if (oob && oob(r0 + r, c0 + c)) { hatch(g, x, y); continue; }
+    g.fillStyle = base ? base(r0 + r, c0 + c) : '#232733'; g.fillRect(x, y, CS-gap, CS-gap);
+  }
+  for (const mk of others){
+    const r = mk.r - r0, c = mk.c - c0; if (!inside(r, c)) continue;
+    g.fillStyle = mk.s === 'zero' ? '#475569' : mk.s === 'done' ? `hsl(${hue(mk.w)} 30% 24%)` : `hsl(${hue(mk.w)} 55% 42%)`; g.fillRect(c*CS, r*CS, CS-gap, CS-gap);
+  }
+  for (const mk of marks){
+    const r = mk.r - r0, c = mk.c - c0; if (!inside(r, c)) continue;
+    g.fillStyle = COL[mk.s]; g.fillRect(c*CS, r*CS, CS-gap, CS-gap);
+  }
+  if (spec){
+    const S = 32 / (spec.eb || 4);
+    g.strokeStyle = '#4a5162'; g.lineWidth = 1;
+    if (!spec.colMajor) for (let c = S - (c0 % S); c < cols; c += S){ g.beginPath(); g.moveTo(c*CS - .5, 0); g.lineTo(c*CS - .5, rows*CS); g.stroke(); }
+    if (sectorSet){ g.strokeStyle = '#fff'; g.lineWidth = CS > 4 ? 1.5 : 1;
+      for (const [, x, y, w, h] of sectorSet.values()){ const cc = x - c0, rr = y - r0;
+        if (rr + h <= 0 || rr >= rows || cc + w <= 0 || cc >= cols) continue; g.strokeRect(cc*CS + .75, rr*CS + .75, w*CS - 2.5 + (CS > 4 ? 0 : 1), h*CS - 2.5 + (CS > 4 ? 0 : 1)); } }
+  }
+  g.strokeStyle = COL.lane; g.lineWidth = CS > 4 ? 2 : 1;
+  for (const mk of marks) if (mk.lane === lane){
+    const r = mk.r - r0, c = mk.c - c0; if (!inside(r, c)) continue;
+    if (CS > 4) g.strokeRect(c*CS + 1, r*CS + 1, CS - 3, CS - 3); else { g.fillStyle = COL.lane; g.fillRect(c*CS, r*CS, CS - gap, CS - gap); }
+  }
+}
+
+/* ---------- Registers ---------- */
+/* All 32 lanes of a warp execute the same instruction, so every lane's copy of a register is in the same state. */
+const RCOL = {ld:'#38bdf8', acc:'#f59e0b', st:'#22c55e', hold:'hsl(200 30% 30%)', idle:'#262a34'};
+function kDone(k, st, t){ // k-steps already folded into the accumulators after this step
+  const KK = k.prob.K, B = k.BK;
+  if (st.store) return KK;
+  const kk = st.i ?? st.dk;
+  if (kk !== undefined) return Math.min(KK, t*B + kk + 1);
+  return Math.min(KK, (st.post ? t + 1 : t) * B);
+}
+function regModel(ki, st, t){
+  const k = KERNELS[ki];
+  if (k.regs) return k.regs(st, t, S.warp, {bx:S.bx, by:S.by});
+  const kd = kDone(k, st, t), acc = st.store ? 'st' : (st.i ?? st.dk) !== undefined ? 'acc' : 'hold';
+  if (ki < 2) return {names:['dot_product'], styles:[acc], values:[6*kd],
+    cap:'One accumulator per thread. A = 2.0 and B = 3.0, so each FMA adds 6. The final value is 7,200.'};
+  if (ki === 2) return {names:['product'], styles:[acc], values:[6*kd],
+    cap:'Still one accumulator per thread. Every FMA has to fetch BOTH operands from shared memory (2 reads), because nothing is kept in a register for reuse.'};
+  const live = st.dk !== undefined, bv = live ? (t*BK + st.dk < K ? 3 : 0) : null;
+  return {names:['b_val', ...range(TM).map(i => `thread_results[${i}]`)],
+    styles:[live ? 'ld' : 'idle', ...range(TM).map(() => acc)],
+    values:[bv, ...range(TM).map(() => 6*kd)],
+    cap:'9 registers per lane (from the source; the compiler adds more for indices). b_val is loaded once from tileB, then 8 FMAs reuse it, one into each accumulator. This register reuse is what drops shared reads from 2 per FMA to 9/8.'};
+}
+const LW = 132, RH = 15, RCS = 9;
+function drawRegs(cv, model, lane){
+  const R = model.names.length, W = LW + 32*RCS + 1, H = R*RH + 16;
+  cv.width = W*dpr; cv.height = H*dpr; cv.style.width = W+'px'; cv.style.height = H+'px';
+  const g = cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0);
+  g.font = '10.5px ui-monospace,Menlo,monospace'; g.textBaseline = 'middle';
+  g.fillStyle = '#8a91a3';
+  for (const l of [0, 8, 16, 24, 31]) g.fillText(String(l), LW + l*RCS, 6);
+  for (let r = 0; r < R; r++){
+    const y = 14 + r*RH;
+    g.fillStyle = '#c8cdd8'; g.fillText(model.names[r], 2, y + RH/2 - 1);
+    for (let c = 0; c < 32; c++){ g.fillStyle = RCOL[model.styles[r]]; g.fillRect(LW + c*RCS, y, RCS-1, RH-2); }
+  }
+  g.strokeStyle = COL.lane; g.lineWidth = 2; g.strokeRect(LW + lane*RCS + 1, 14 + 1, RCS - 3, R*RH - 4);
+}
+
+/* ---------- State + UI ---------- */
+const $ = id => document.getElementById(id);
+let ki = 0, timer = null;
+const S = {step:0, tile:0, warp:0, lane:0, bx:0, by:0};
+let cfgIdx = 0;
+
+function buildTabs(){
+  $('tabs').innerHTML = KERNELS.map((k, i) => {
+    const grp = GROUPS.find(g => g[0] === i);
+    return (grp ? `<span class="tabsep">${grp[1]}</span>` : '') + `<div class="tab${i===ki?' on':''}" data-i="${i}">${k.name}</div>`;
+  }).join('');
+  document.querySelectorAll('.tab').forEach(el => el.onclick = () => { ki = +el.dataset.i; Object.assign(S, {step:0, tile:0, warp:0, lane:0, bx:0, by:0}); buildTabs(); init(); });
+}
+function init(){
+  const k = KERNELS[ki], geo = k.geo;
+  const maxDim = Math.max(...Object.values(geo).flatMap(p => [p.rows, p.cols]));
+  CS = Math.max(2, Math.min(9, Math.floor(320 / maxDim)));
+  $('meta').innerHTML = k.meta || '';
+  $('blurb').innerHTML = k.blurb;
+  $('step').max = k.steps.length - 1;
+  $('warp').max = k.numWarps - 1;
+  $('tile').max = k.numTiles - 1;
+  $('tileName').textContent = k.collective ? 'k chunk' : 'tile t';
+  $('tileWrap').classList.toggle('hide', !k.tiled);
+  $('cfgWrap').classList.toggle('hide', k.id !== 7);
+  $('bxWrap').classList.toggle('hide', !k.blocks); $('byWrap').classList.toggle('hide', !k.blocks);
+  if (k.blocks){ $('bx').max = k.blocks.x - 1; $('by').max = k.blocks.y - 1; }
+  document.querySelectorAll('.smem').forEach(el => el.classList.toggle('hide', !geo.tA));
+  $('capA').innerHTML = k.capA; $('capB').innerHTML = k.capB; $('capC').innerHTML = k.capC;
+  $('capTA').innerHTML = k.capTA || ''; $('capTB').innerHTML = k.capTB || '';
+  $('hR').textContent = k.collective ? 'Fragments — selected warp' : 'Registers — selected warp';
+  S.step = Math.min(S.step, k.steps.length - 1); S.tile = Math.min(S.tile, k.numTiles - 1); S.warp = Math.min(S.warp, k.numWarps - 1);
+  $('code').innerHTML = k.code.map((l, i) => `<span class="ln" data-l="${i}">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>`).join('');
+  render();
+}
+function render(){
+  const k = KERNELS[ki], st = k.steps[S.step], t = k.tiled ? S.tile : 0, ctx = {bx:S.bx, by:S.by}, geo = k.geo;
+  ['step','tile','warp','lane','bx','by'].forEach(id => $(id).value = S[id]);
+  $('stepv').textContent = `${S.step+1}/${k.steps.length}`; $('tilev').textContent = `${S.tile} (k ${S.tile*k.BK}–${S.tile*k.BK+k.BK-1})`;
+  $('warpv').textContent = S.warp; $('lanev').textContent = S.lane; $('bxv').textContent = S.bx; $('byv').textContent = S.by;
+  $('steplabel').textContent = st.label;
+  document.body.classList.toggle('insync', !!st.sync);
+  const lines = [].concat(st.line);
+  document.querySelectorAll('#code .ln').forEach(el => el.classList.toggle('hot', lines.includes(+el.dataset.l)));
+
+  const f = k.frame(st, S.warp, t, ctx);
+  markBroadcasts(f.marks);
+  const win = Object.assign({C:{r0:0, c0:0}}, k.window(t, ctx));
+  const by = p => f.marks.filter(m => m.p === p);
+  const owner = (r, c) => { const o = k.owner(r, c, ctx), sel = o === S.warp; const h = (o * 360 / k.numWarps) % 360;
+    return sel ? `hsl(${h} 35% 34%)` : `hsl(${h} 18% 17%)`; };
+  const gA = globalStats(f.marks, 'A', geo.A), gB = globalStats(f.marks, 'B', geo.B), gC = globalStats(f.marks, 'C', geo.C);
+  let others = [];
+  if ($('allw').checked) for (let w2 = 0; w2 < k.numWarps; w2++) if (w2 !== S.warp)
+    others.push(...k.frame(st, w2, t, ctx).marks.map(m => ({...m, w: w2})));
+  const ob = p => others.filter(m => m.p === p);
+  const hue = w => (w * 360 / k.numWarps) % 360;
+  const oob = k.oob || {};
+  drawPanel($('cvC'), {...geo.C, ...win.C, marks: by('C'), others: ob('C'), hue, base: owner, spec: geo.C, lane: S.lane, sectorSet: gC.sectorSet, oob: oob.C});
+  drawPanel($('cvA'), {...geo.A, ...win.A, marks: by('A'), others: ob('A'), hue, spec: geo.A, lane: S.lane, sectorSet: gA.sectorSet, oob: oob.A});
+  drawPanel($('cvB'), {...geo.B, ...win.B, marks: by('B'), others: ob('B'), hue, spec: geo.B, lane: S.lane, sectorSet: gB.sectorSet, oob: oob.B});
+  const span = (p, w) => `rows ${w.r0}–${w.r0+p.rows-1}, cols ${w.c0}–${w.c0+p.cols-1}`;
+  $('hC').textContent = k.blocks ? `C — block (${S.bx}, ${S.by}), ${span(geo.C, win.C)}` : 'C — thread view';
+  $('hA').textContent = ki < 4 ? (k.tiled ? `A — global, cols ${win.A.c0}–${win.A.c0+31}` : 'A — global memory') : `A — global, ${span(geo.A, win.A)}`;
+  $('hB').textContent = ki < 4 ? (k.tiled ? `B — global, rows ${win.B.r0}–${win.B.r0+31}` : 'B — global memory') : `B — global, ${span(geo.B, win.B)}`;
+  if (geo.tA){
+    $('hTA').textContent = `tileA — shared memory [${geo.tA.rows}, ${geo.tA.cols}]`;
+    $('hTB').textContent = `tileB — shared memory [${geo.tB.rows}, ${geo.tB.cols}]`;
+    drawPanel($('cvTA'), {...geo.tA, marks: by('tA'), others: ob('tA'), hue, lane: S.lane});
+    drawPanel($('cvTB'), {...geo.tB, marks: by('tB'), others: ob('tB'), hue, lane: S.lane});
+  }
+
+  const sA = smemStats(f.marks, 'tA', geo.tA?.cols), sB = smemStats(f.marks, 'tB', geo.tB?.cols);
+  const row = (a, b, cls='') => `<div><span>${a}</span><span class="${cls}">${b}</span></div>`;
+  const eff = g => !g.fetched ? '—' : g.distinct < g.sectors
+    ? `${g.bytesNeeded} / ${g.distinct*32} B distinct (${Math.round(100*g.bytesNeeded/(g.distinct*32))}%) · ${g.fetched} B requested`
+    : `${g.bytesNeeded} / ${g.fetched} B (${Math.round(100*g.bytesNeeded/g.fetched)}%)`;
+  const unit = n => k.collective ? `${n} warp-collective op${n>1?'s':''}` : `${n} instr${n>1?'s':''}`;
+  const uniq = g => g.distinct < g.sectors ? ` (${g.distinct} distinct)` : '';
+  const bad = g => g.sectors > (k.collective ? 32 : 4) * g.instrs;
+  let h = '';
+  if (f.exited) h += row('this warp', 'returned (row ≥ pad_M)', 'bad');
+  if (gA.instrs) h += row(`global load A: ${unit(gA.instrs)}`, `${gA.sectors} sector${gA.sectors>1?'s':''}${uniq(gA)}${gA.bcast?' · broadcast':''}`, bad(gA) ? 'bad' : 'good') + row('&nbsp;&nbsp;distinct bytes / bytes fetched', eff(gA));
+  if (gB.instrs) h += row(`global load B: ${unit(gB.instrs)}`, `${gB.sectors} sector${gB.sectors>1?'s':''}${uniq(gB)}${gB.bcast?' · broadcast':''}`, bad(gB) ? 'bad' : 'good') + row('&nbsp;&nbsp;distinct bytes / bytes fetched', eff(gB));
+  if (gC.instrs) h += row(`global store C: ${unit(gC.instrs)}`, `${gC.sectors} sectors${uniq(gC)}`, bad(gC) ? 'bad' : 'good');
+  if (sA.instrs) h += row(`shared tileA: ${sA.instrs} instr${sA.instrs>1?'s':''}`, `${sA.wavefronts} wavefront${sA.wavefronts>1?'s':''}${sA.bcast?` · ${sA.bcast} broadcast`:''}`, ki >= 4 && sA.wavefronts > sA.instrs ? 'bad' : '');
+  if (sB.instrs) h += row(`shared tileB: ${sB.instrs} instr${sB.instrs>1?'s':''}`, `${sB.wavefronts} wavefront${sB.wavefronts>1?'s':''}${sB.bcast?` · ${sB.bcast} broadcast`:''}`, ki >= 4 && sB.wavefronts > sB.instrs ? 'bad' : '');
+  if (f.fma) h += row(k.collective ? 'multiply-adds this step (whole warp)' : 'FMAs this step (whole warp)', f.fma.toLocaleString());
+  if (f.smemReads) h += row('shared reads per FMA, per thread', `${f.smemReads} / ${f.fmaPerThread} = ${(f.smemReads/f.fmaPerThread).toFixed(3)}`, f.smemReads/f.fmaPerThread >= 2 ? 'bad' : 'good');
+  if (st.sync) h += '<span class="note">No memory traffic. Barrier: phase 1 writes must land before anyone reads the tile, and nobody may overwrite the tile while others are still reading it.</span>';
+  h += `<span class="note">${k.note ? k.note(st, t) : noteFor(ki, st)}</span>`;
+  $('metrics').innerHTML = h;
+  const rm = regModel(ki, st, t);
+  $('capR').innerHTML = rm.cap;
+  drawRegs($('cvR'), rm, S.lane);
+  const fmt = v => v === null ? '—' : typeof v === 'number' ? v.toFixed(1) : v;
+  $('insp').innerHTML = k.inspect(st, S.warp, S.lane, t, ctx) + '<br><span style="color:var(--dim)">registers (A = 2, B = 3):</span> ' +
+    rm.names.map((n, i) => `<code>${n}=${fmt(rm.values[i])}</code>`).join(' ');
+}
+function noteFor(ki, st){
+  if (ki === 0) return st.store ? 'Store: 32 lanes write 32 different rows of C → 32 sectors. Nsight: "uncoalesced global stores".' : 'A: 32 lanes × 32 different rows = 32 sectors, 4 useful bytes in each. B: one address → 1 sector broadcast. 33 sectors per k-step.';
+  if (ki === 1) return st.store ? 'Store: 32 neighbours in one row → 4 sectors. The store warning is gone.' : 'A: one address → broadcast (1 sector, 4 of 32 bytes used — the leftover "not optimal" load). B: 32 neighbours → 4 sectors, fully used. 5 sectors per k-step.';
+  if (ki === 2) return st.load ? 'Each warp moves one row of A and one row of B into shared memory: 4 + 4 sectors, 100% used. Those 32 floats then feed 32 k-steps.' : st.i !== undefined ? 'Every FMA needs two shared-memory reads (tileA broadcast + tileB row). Shared memory issues ~1 of these per tick while the 4 quadrants want 8 → MIO throttle.' : '';
+  if (ki === 3) return (st.la !== undefined || st.lb !== undefined) ? 'Strided cooperative load: 128 threads × 8 passes = 1,024 slots. Pass j: warp w loads tile row w + 4j, 32 consecutive floats → 4 sectors.' : st.dk !== undefined ? 'One tileB read, held in b_val, feeds 8 FMAs; the 8 tileA reads are broadcasts. 9 reads / 8 FMAs. Registers now carry the reuse that kernel 3 asked shared memory for.' : '';
+  return '';
+}
+
+$('cfg').innerHTML = CANDIDATES.map((c, i) => `<option value="${i}">(${c.join(', ')}) · ${(c[0]/c[5])*(c[1]/c[6])} thr</option>`).join('');
+$('cfg').onchange = e => { cfgIdx = +e.target.value; KERNELS[6] = warpTiled(CANDIDATES[cfgIdx], 7); Object.assign(S, {step:0, tile:0, warp:0}); init(); };
+$('allw').onchange = render;
+['step','tile','warp','lane','bx','by'].forEach(id => $(id).oninput = e => { S[id] = +e.target.value; render(); });
+$('prev').onclick = () => { S.step = Math.max(0, S.step - 1); render(); };
+$('next').onclick = () => advance();
+function advance(){
+  const k = KERNELS[ki];
+  if (S.step < k.steps.length - 1){
+    // in tiled kernels, the final "store" step only happens after the last tile
+    if (k.tiled && S.step === k.steps.length - 2 && S.tile < k.numTiles - 1){ S.tile++; S.step = k.loopStart || 0; }
+    else S.step++;
+  } else { S.step = 0; S.tile = 0; }
+  render();
+}
+$('play').onclick = () => {
+  if (timer){ clearInterval(timer); timer = null; $('play').textContent = '▶ play'; return; }
+  $('play').textContent = '❚❚ pause';
+  const tick = () => { advance(); clearInterval(timer); timer = setInterval(tick, +$('speed').value); };
+  timer = setInterval(tick, +$('speed').value);
+};
+document.addEventListener('keydown', e => { if (e.key === 'ArrowRight') advance(); if (e.key === 'ArrowLeft'){ S.step = Math.max(0, S.step-1); render(); } });
+
+buildTabs(); init();
+</script>
+</body>
+</html>

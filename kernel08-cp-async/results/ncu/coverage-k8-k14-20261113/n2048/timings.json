@@ -1,0 +1,197 @@
+{
+  "n": 2048,
+  "runs": {
+    "k8": [
+      "k8/old",
+      "128x64 BK8",
+      3
+    ],
+    "k9": [
+      "k9+T/old",
+      "128x64 BK8",
+      3
+    ],
+    "k10": [
+      "k9TS",
+      "256x128 BK16 16x8",
+      4
+    ],
+    "k11": [
+      "k11",
+      "128x256 BK16 8x16",
+      4
+    ],
+    "k12": [
+      "k12",
+      "256x128 BK16 16x8",
+      4
+    ],
+    "k13": [
+      "k13",
+      "256x128 BK16 16x8",
+      3
+    ],
+    "k14": [
+      "k14",
+      "128x128 BK16",
+      2
+    ]
+  },
+  "timings": {
+    "facts": {
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "run_id": "fc-01M7AFFCF1ZT6V972EG30PHZH7",
+      "utc": "2026-11-13 12:52:45 UTC"
+    },
+    "rows": [
+      {
+        "n": 2048,
+        "kernel": "cuBLAS",
+        "median_us": 341.7600095272064,
+        "min_us": 341.0879969596863,
+        "max_us": 343.7120020389557,
+        "speed_vs_cublas_median": 1.0,
+        "speed_vs_cublas_min": 1.0,
+        "speed_vs_cublas_max": 1.0,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k8/old 128x64 BK8 S=3",
+        "median_us": 587.3599946498871,
+        "min_us": 585.3759944438934,
+        "max_us": 590.5919969081879,
+        "speed_vs_cublas_median": 0.5822044752520416,
+        "speed_vs_cublas_min": 0.5800266099392676,
+        "speed_vs_cublas_max": 0.5827271462480774,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k9+T/old 128x64 BK8 S=3",
+        "median_us": 455.05601167678833,
+        "min_us": 453.92000675201416,
+        "max_us": 457.44000375270844,
+        "speed_vs_cublas_median": 0.7513212615292362,
+        "speed_vs_cublas_min": 0.7470528560999251,
+        "speed_vs_cublas_max": 0.7521708603845416,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k9TS 256x128 BK16 16x8 S=4",
+        "median_us": 385.72800159454346,
+        "min_us": 385.16800105571747,
+        "max_us": 388.15999031066895,
+        "speed_vs_cublas_median": 0.8855291750453206,
+        "speed_vs_cublas_min": 0.8802967917049791,
+        "speed_vs_cublas_max": 0.8870800317003182,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k11 128x256 BK16 8x16 S=4",
+        "median_us": 369.80800330638885,
+        "min_us": 369.1200017929077,
+        "max_us": 372.079998254776,
+        "speed_vs_cublas_median": 0.9237835222046926,
+        "speed_vs_cublas_min": 0.9191701488713135,
+        "speed_vs_cublas_max": 0.9255568635647089,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k12 256x128 BK16 16x8 S=4",
+        "median_us": 364.8959994316101,
+        "min_us": 363.93600702285767,
+        "max_us": 366.8320029973984,
+        "speed_vs_cublas_median": 0.9370281254945683,
+        "speed_vs_cublas_min": 0.9323321324180844,
+        "speed_vs_cublas_max": 0.9390276031024817,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k13 256x128 BK16 16x8 S=3",
+        "median_us": 366.1760091781616,
+        "min_us": 365.55200815200806,
+        "max_us": 368.4320002794266,
+        "speed_vs_cublas_median": 0.9329392708394807,
+        "speed_vs_cublas_min": 0.9282795784589287,
+        "speed_vs_cublas_max": 0.9349176822231935,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      },
+      {
+        "n": 2048,
+        "kernel": "k14 128x128 BK16 S=2",
+        "median_us": 391.90399646759033,
+        "min_us": 390.1119977235794,
+        "max_us": 393.3440148830414,
+        "speed_vs_cublas_median": 0.8739270145604731,
+        "speed_vs_cublas_min": 0.8703355924769028,
+        "speed_vs_cublas_max": 0.875948365963297,
+        "rounds_faster_than_cublas": 0,
+        "rounds": 15
+      }
+    ],
+    "correctness": [
+      {
+        "n": 2048,
+        "variant": "k8/old",
+        "config": "128x64 BK8",
+        "stages": 3,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k9+T/old",
+        "config": "128x64 BK8",
+        "stages": 3,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k9TS",
+        "config": "256x128 BK16 16x8",
+        "stages": 4,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k11",
+        "config": "128x256 BK16 8x16",
+        "stages": 4,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k12",
+        "config": "256x128 BK16 16x8",
+        "stages": 4,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k13",
+        "config": "256x128 BK16 16x8",
+        "stages": 3,
+        "relative_error": 0.0
+      },
+      {
+        "n": 2048,
+        "variant": "k14",
+        "config": "128x128 BK16",
+        "stages": 2,
+        "relative_error": 2.1151274722797098e-06
+      }
+    ]
+  },
+  "gpu_info": "Fri Nov 13 12:53:49 2026       \n+-----------------------------------------------------------------------------------------+\n| NVIDIA-SMI 610.57.04              KMD Version: 610.57.04     CUDA UMD Version: 13.3     |\n+-----------------------------------------+------------------------+----------------------+\n| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |\n| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |\n|                                         |                        |               MIG M. |\n|=========================================+========================+======================|\n|   0  NVIDIA H100 80GB HBM3          On  |   00000000:05:00.0 Off |                    0 |\n| N/A   34C    P0            131W /  700W |    1185MiB /  81559MiB |      2%      Default |\n|                                         |                        |             Disabled |\n+-----------------------------------------+------------------------+----------------------+\n\n+-----------------------------------------------------------------------------------------+\n| Processes:                                                                              |\n|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |\n|        ID   ID                                                               Usage      |\n|=========================================================================================|\n|    0   N/A  N/A               1      C   /bin/dumb-init                         1078MiB |\n+-----------------------------------------------------------------------------------------+\n"
+}
