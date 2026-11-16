@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8">
+<title>FlashAttention 1–4 — tile view, block view, unit rails</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --ink:#e6e8ee; --dim:#8a91a3; --line:#2a2f3a;
+    --copy:#38bdf8; --tc:#a78bfa; --pv:#818cf8; --exp:#f59e0b; --fma:#f472b6; --st:#22c55e; --corr:#fb7185; --lane:#fde047;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 -apple-system,BlinkMacSystemFont,"Inter","Segoe UI",sans-serif}
+  header{padding:16px 22px 6px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:13px;max-width:1200px}
+  .tabs{display:flex;gap:6px;padding:10px 22px 0;flex-wrap:wrap}
+  .tab{background:var(--panel);border:1px solid var(--line);color:var(--dim);padding:7px 14px;border-radius:8px 8px 0 0;cursor:pointer;font-weight:600}
+  .tab.on{color:var(--ink);border-bottom-color:var(--panel);background:#1d212a}
+  .tabsep{align-self:center;color:#4a5162;font-size:12px;padding:0 4px}
+  main{background:#1d212a;margin:0 22px 22px;border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:14px 16px}
+  .meta{color:#cbd2e0;font-size:12.5px;margin:0 0 6px;font-variant-numeric:tabular-nums}
+  .blurb{margin:0 0 10px;max-width:1150px}
+  .blurb b{color:#fff}
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin-bottom:10px}
+  .controls label{color:var(--dim);font-size:12px;display:flex;align-items:center;gap:6px}
+  .controls input[type=range]{width:150px}
+  .val{color:var(--ink);font-variant-numeric:tabular-nums;min-width:30px;display:inline-block}
+  select{background:#2b3140;color:var(--ink);border:1px solid #3a4152;border-radius:6px;padding:4px 6px;font:12px ui-monospace,Menlo,monospace}
+  button{background:#2b3140;color:var(--ink);border:1px solid #3a4152;border-radius:6px;padding:5px 10px;cursor:pointer;font-weight:600}
+  button:hover{background:#353c4e}
+  button.on{border-color:var(--lane);color:var(--lane)}
+  .steplabel{font-weight:700;color:#fff;font-variant-numeric:tabular-nums;min-width:260px}
+  .phases{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+  .phases span{border:1px solid var(--line);border-radius:12px;padding:3px 10px;font-size:12px;color:var(--dim)}
+  .phases span.on{color:#0f1115;font-weight:700}
+  .grid{display:grid;grid-template-columns:max-content max-content;gap:14px;align-items:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;overflow-x:auto}
+  .card h3{margin:0 0 2px;font-size:13px}
+  .card .cap{color:var(--dim);font-size:11.5px;margin-bottom:6px;max-width:470px}
+  .wide{grid-column:1/-1}
+  .wide .cap,.wide .controls{max-width:850px}
+  #capS{max-width:340px}
+  canvas{display:block}
+  .scroll{overflow-x:auto}
+  .side{display:flex;flex-direction:column;gap:12px;min-width:330px;max-width:470px;flex:1}
+  pre{margin:0;font:11.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre;overflow-x:auto;max-height:430px;overflow-y:auto}
+  pre .ln{display:block;padding:0 6px;border-left:3px solid transparent;color:#aab1c2}
+  pre .ln.note{color:#6b7385;font-style:italic}
+  pre .ln.hot{background:#2f2a14;border-left-color:var(--exp);color:#fff}
+  .src{color:var(--dim);font-size:11px;margin:0 0 6px;word-break:break-all}
+  .metrics div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;border-bottom:1px dashed #262b35;font-size:12.5px}
+  .metrics div span:last-child{font-variant-numeric:tabular-nums;color:#fff;text-align:right}
+  .metrics .note{display:block;color:var(--dim);border:0;padding-top:6px;font-size:12px}
+  .metrics .good{color:#4ade80!important}.metrics .bad{color:#f87171!important}
+  .insp{font-size:12.5px}
+  .insp code,.blurb code,.metrics code,td code{color:var(--lane)}
+  .osm table{border-collapse:collapse;font-size:12px;width:100%;margin-top:4px}
+  .osm td,.osm th{border-bottom:1px solid #262b35;padding:3px 5px;text-align:right;font-variant-numeric:tabular-nums}
+  .osm th{color:var(--dim);font-weight:500}
+  .osm td:first-child,.osm th:first-child{text-align:left}
+  .osm .bar{display:inline-block;height:9px;background:var(--exp);border-radius:2px;vertical-align:middle}
+  .osm .ops{color:var(--dim);font-size:12px;margin-top:6px}
+  .osm .ops b{color:#fff}
+  .osm .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0;font-size:12px;color:var(--dim)}
+  .legend{display:flex;flex-wrap:wrap;gap:10px;font-size:11.5px;color:var(--dim);margin-top:10px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+  table.cmp{border-collapse:collapse;font-size:12.5px;margin-top:6px}
+  table.cmp th,table.cmp td{border:1px solid var(--line);padding:5px 9px;text-align:left;vertical-align:top}
+  table.cmp th{background:#232835;color:#cbd2e0}
+  table.cmp td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  table.cmp tr.grp td{background:#20242e;color:#cbd2e0;font-weight:700}
+  .foot{color:var(--dim);font-size:12px;margin-top:12px;max-width:1150px}
+  .hide{display:none!important}
+  @media (max-width:1100px){.grid{grid-template-columns:minmax(0,1fr)}}
+  @media (max-width:760px){header{padding:12px 14px 4px}.tabs{padding:8px 14px 0}main{margin:0 8px 16px;padding:10px}.side{max-width:none;min-width:0}}
+</style>
+</head>
+<body>
+<header>
+  <h1>FlashAttention 1–4 · tile view, block view, unit rails</h1>
+  <div class="sub">Course book Chapters 8–10 (Lectures 15, 17, 22) and <code>lecture17/</code>. One attention head at a time. The <b>tile view</b> uses a toy sequence of <b>N = 1,024 tokens, d = 128</b> so that every tile fits on screen. The measured numbers are the book's runs: one layer of Qwen3-8B, 4,096 tokens, 32 heads, BF16, on an H100 (FA-1 to FA-3) or a B200 (FA-4). Code is quoted from <code>lecture17/flash_attention_triton.py</code> and from vLLM's fork of the kernels, <code>vllm-project/flash-attention</code> @ <code>8dd9eae</code>. Lines in grey italics are annotations, not source.</div>
+</header>
+<div class="tabs" id="tabs"></div>
+<main>
+  <div class="meta" id="meta"></div>
+  <p class="blurb" id="blurb"></p>
+  <div class="controls">
+    <button id="prev">◀</button><button id="play">▶ play</button><button id="next">▶</button>
+    <span class="steplabel" id="steplabel"></span>
+    <label>step <input type="range" id="step" min="0" value="0"><span class="val" id="stepv"></span></label>
+    <label id="selWrap"><span id="selName">query tile</span> <input type="range" id="sel" min="0" value="0" style="width:110px"><span class="val" id="selv"></span></label>
+    <label id="causalWrap"><input type="checkbox" id="causal"> causal mask</label>
+    <label>query row <input type="range" id="row" min="0" value="0" style="width:110px"><span class="val" id="rowv"></span></label>
+    <label>speed <input type="range" id="speed" min="40" max="900" value="320" style="width:90px"></label>
+  </div>
+  <div class="phases" id="phases"></div>
+  <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap">
+    <div class="grid" id="panels">
+      <div class="card"><h3>S tiles: one head</h3><div class="cap" id="capS"></div><canvas id="cvS"></canvas></div>
+      <div class="card"><h3>Inside one block</h3><div class="cap" id="capB"></div><canvas id="cvB"></canvas></div>
+      <div class="card wide"><h3>Unit rails: one 128 × 128 tile's work on one SM, in cycles</h3>
+        <div class="cap" id="capR"></div>
+        <div class="controls" style="margin:4px 0 8px">
+          <label>GPU <select id="gpu"><option value="h100">H100 (4,096 tensor ops / SM / cycle)</option><option value="b200">B200 (8,192 tensor ops / SM / cycle)</option></select></label>
+          <label id="emuWrap">exponentials on the FMA pipe <select id="emu"></select></label>
+          <label id="thrWrap"><input type="checkbox" id="thr" checked> rescale threshold (8 in log₂)</label>
+        </div>
+        <div class="scroll"><canvas id="cvR"></canvas></div></div>
+      <div class="card wide"><h3>The GPU: where the blocks run</h3><div class="cap" id="capG"></div><div class="scroll"><canvas id="cvG"></canvas></div></div>
+    </div>
+    <div class="side">
+      <div class="card"><h3>Code (current lines highlighted)</h3><div class="src" id="src"></div><pre id="code"></pre></div>
+      <div class="card"><h3>This step, for the selected block</h3><div class="metrics" id="metrics"></div></div>
+      <div class="card insp"><h3>Row inspector</h3><div id="insp"></div></div>
+      <div class="card osm"><h3>Online softmax: one row, two pieces</h3><div id="osm"></div></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span><i style="background:var(--copy)"></i>copy (cp.async / TMA / tl.load)</span>
+    <span><i style="background:var(--tc)"></i>tensor cores: S = Q·Kᵀ</span>
+    <span><i style="background:var(--pv)"></i>tensor cores: O += P·V</span>
+    <span><i style="background:var(--exp)"></i>exponentials (MUFU)</span>
+    <span><i style="background:var(--fma)"></i>FMA lanes: max, sum, ÷ℓ, emulated 2ˣ</span>
+    <span><i style="background:var(--corr)"></i>FA-4 correction warpgroup (rescale)</span>
+    <span><i style="background:var(--st)"></i>O written to HBM</span>
+    <span><i style="background:hsl(199 40% 26%)"></i>key tile already folded in</span>
+    <span><i style="background:repeating-linear-gradient(135deg,#1b1e25 0 3px,#3a3f4b 3px 4px)"></i>skipped (causal) or padding</span>
+    <span><i style="background:transparent;border:2px solid var(--lane)"></i>selected block / row</span>
+  </div>
+  <div class="card" style="margin-top:14px">
+    <h3>Side by side</h3>
+    <table class="cmp">
+      <tr><th>Version</th><th>Grid (4,096 tokens, 32 heads)</th><th>Loop order</th><th>Inside one block</th><th>Divide by ℓ</th><th>Copies</th><th>Measured, one layer, 4,096 tokens</th></tr>
+      <tr class="grp"><td colspan="7">Chapter 8–9 · H100 · the book's Triton ladder (T1–T4) and the real kernels</td></tr>
+      <tr><td>FA-1 · paper Algorithm 1 (book T1)</td><td>32 blocks, one per head: 32 of 132 SMs busy</td><td>K/V tiles outer, Q tiles inner: O<sub>i</sub>, m, ℓ round-trip through HBM every step</td><td>FA-1's CUDA kernel: split-K. 4 warps share the keys, and their partial results are merged in shared memory after a barrier</td><td>every key tile</td><td>cp.async, every thread</td><td class="n">17.21 ms · 16.0 TFLOP/s · 1.6%</td></tr>
+      <tr><td>FA-1 · <code>lecture17</code> Triton</td><td>cdiv(N, 32) programs, one head</td><td>Q tile per program, K/V inner (forward, causal)</td><td>Triton chooses (num_warps = 4 by default)</td><td>every key tile</td><td><code>tl.load</code></td><td class="n">not measured here</td></tr>
+      <tr><td>FA-2 (PyTorch CUDA kernel)</td><td>1,024 blocks of 128 threads, 2 per SM, 3.9 waves</td><td>Q tile per block, K/V inner, right → left</td><td>split-Q: 4 warps × 32 whole rows, so no merging</td><td>once, at the end (+ LSE)</td><td>cp.async, every thread</td><td class="n">0.785 ms · 350 · 35.4%<br>(T4, Triton/wgmma: 0.534 ms)</td></tr>
+      <tr><td>FA-3</td><td>132 persistent blocks of 384 threads</td><td>same, right → left</td><td>producer warpgroup (24 regs) + 2 consumer warpgroups (64 rows each, 240 regs); ping-pong + intra-warpgroup overlap</td><td>once</td><td>TMA, 1 thread; ring of 2 stages</td><td class="n">0.383 ms · 717 · 72.5%</td></tr>
+      <tr class="grp"><td colspan="7">Chapter 10 · B200 · FlashAttention-4 4.0.0b37</td></tr>
+      <tr><td>FA-4</td><td>148 persistent blocks of 512 threads, 2 query tiles each</td><td>same, right → left</td><td>2 softmax warpgroups (one row per thread), correction warpgroup, MMA / load / epilogue warps; S, P, O in tensor memory</td><td>once, by the correction warpgroup</td><td>TMA, load warp</td><td class="n">0.230 ms · 1,193 · 53.0% of 2,250</td></tr>
+    </table>
+    <p class="foot">Every rate counts the same 4 × 32 × 4,096² × 128 = 274.9 billion operations. The unit rails are the book's idealised cycle budget (§9.5, §10.3): two products take 8,388,608 operations per 128 × 128 tile, and the tile needs 16,384 exponentials at 16 per SM per cycle. The "rest of the softmax" blocks are drawn at 10% of the exponentials' length. The book did not measure them, so their length is a schematic. The tile view's byte counts are global-memory requests by one block at N = 1,024; the L2 cache may serve re-reads of K and V.</p>
+  </div>
+</main>
+<script>
+const TOK = 1024, D = 128;
+const C = {copy:'#38bdf8', tc:'#a78bfa', pv:'#818cf8', exp:'#f59e0b', fma:'#f472b6', st:'#22c55e', corr:'#fb7185',
+           done:'hsl(199 40% 26%)', lane:'#fde047', idle:'#262a34', line:'#2a2f3a', dim:'#8a91a3', ink:'#e6e8ee'};
+const PH = {
+  init:{name:'set-up', col:C.copy},
+  load:{name:'K/V tile → shared memory', col:C.copy},
+  qk:{name:'S = Q·Kᵀ', col:C.tc},
+  softmax:{name:'online softmax', col:C.exp},
+  pv:{name:'O += P·V', col:C.pv},
+  final:{name:'divide + store O', col:C.st},
+};
+const PH_ORDER = ['init','load','qk','softmax','pv','final'];
+const WHUE = [199, 142, 32, 292];
+const wcol = (w, l = 45) => `hsl(${WHUE[w % 4]} 55% ${l}%)`;
+const range = n => [...Array(n).keys()];
+const KiB = b => (b / 1024).toLocaleString(undefined, {maximumFractionDigits: 1});
+const fmt = n => n >= 1e9 ? (n / 1e9).toFixed(2) + ' G' : n >= 1e6 ? (n / 1e6).toFixed(2) + ' M' : n >= 1e3 ? (n / 1e3).toFixed(1) + ' k' : String(n);
+
+/* geometry of one score tile, in tokens */
+function tstat(k, i, j, causal){
+  const r0 = i * k.Br, r1 = r0 + k.Br, c0 = j * k.Bc, c1 = c0 + k.Bc;
+  const skip = causal && c0 > r1 - 1;
+  return {r0, r1, c0, c1, skip, cross: causal && !skip && c1 - 1 > r0, pad: c1 > TOK};
+}
+const ceil = Math.ceil;
+
+/* ======================= kernel definitions ======================= */
+const L = (t, tags = '', note = false) => ({t, tags, note});
+
+const FA1P = {
+  id:'fa1p', tab:'FA-1 · paper', group:'Chapter 8–9 · H100', gpu:'h100', Br:128, Bc:64, causal:'off', sel:null, rails:'serial1p',
+  name:'FlashAttention-1, paper Algorithm 1',
+  meta:'Book T1: 128 × 64 tiles, one block per head. At N = 1,024 that is 8 query tiles × 16 key tiles = 128 steps, each of 4 phases. Measured at 4,096 tokens: 17.21 ms, 16.0 TFLOP/s, 1.6% of 989, 10.3 GiB of HBM traffic.',
+  blurb:'The first FlashAttention already never writes S: a 128 × 64 tile of scores lives on the chip and is thrown away. But the paper\'s loop runs <b>key tiles outside and query tiles inside</b>. Watch the yellow outline sweep down each column. Because the inner loop changes query tile at every step, the output so far O<sub>i</sub> and its m<sub>i</sub>, ℓ<sub>i</sub> cannot stay in registers. They make a <b>round trip to HBM at every step</b> (160 KiB per step, 10 GiB per layer). The output is also <b>divided by ℓ at every step</b>, and the next step undoes that division. One block per head means 32 blocks on 32 of the H100\'s 132 SMs.',
+  capS:'All 8 × 16 tiles belong to this one block (one head). Outer loop: key tile j (cyan column, held in shared memory). Inner loop: query tile i.',
+  order(){ const o = []; for (let j = 0; j < 16; j++) for (let i = 0; i < 8; i++) o.push({i:[i], j}); return o; },
+  rowsOf(){ return range(8); },
+  stepLabel: s => `key tile j = ${s.j}, query tile i = ${s.i[0]}`,
+  code:[
+    L('# FlashAttention-1, paper Algorithm 1, as the book\'s T1 writes it (Listing 9.1)', '', true),
+    L('grid: 32 blocks, one per head', 'init'),
+    L('for each key and value tile j:              # outer loop', 'load'),
+    L('    load K_j, V_j                            # into shared memory', 'load'),
+    L('    for each query tile i:                   # inner loop', 'load'),
+    L('        load Q_i, and O_i, m_i, l_i from HBM # the output so far makes a round trip', 'load'),
+    L('        S = Q_i @ K_j^T                      # tensor cores', 'qk'),
+    L('        m_new = max(m_i, row max of S); P = exp2(S - m_new); a = exp2(m_i - m_new)', 'softmax'),
+    L('        # FA-1 CUDA: 4 warps each hold 16 of the keys -> partial m, l, O per row,', 'softmax', true),
+    L('        #   written to smem, __syncthreads(), read back and rescale-added', 'softmax', true),
+    L('        l_new = l_i * a + row sum of P', 'softmax'),
+    L('        O_i = (O_i * (a * l_i) + P @ V_j) / l_new  # undo the old division, divide again', 'pv'),
+    L('        write O_i, m_i = m_new, l_i = l_new to HBM', 'pv'),
+    L('# after the last j: O is already in HBM, normalised', 'final', true),
+  ],
+  src:'Book Listing 9.1 (T1 = FA-1 paper Algorithm 1). The FA-1 CUDA kernel traits are FMHA_kernel_traits<128,128,16,1,4> (book §9.2 note 4).',
+  mem:{cols:['HBM','shared memory','registers'], boxes:[
+    {id:'hQ',c:0,r:0,t:'Q (bf16)'},{id:'hK',c:0,r:1,t:'K, V (bf16)'},{id:'hO',c:0,r:2,t:'O, m, ℓ (fp32)'},
+    {id:'sKV',c:1,r:0,t:'K_j, V_j'},{id:'sQ',c:1,r:1,t:'Q_i'},{id:'sO',c:1,r:2,t:'O_i, m_i, ℓ_i'},{id:'sM',c:1,r:3,t:'split-K partials'},
+    {id:'rS',c:2,r:0,t:'S (128 × 64)'},{id:'rP',c:2,r:1,t:'P = exp2(S − m)'},{id:'rO',c:2,r:2,t:'O_i update'}],
+    flows(s){
+      switch (s.ph){
+        case 'init': return [];
+        case 'load': return [['hQ','sQ','Q_i'],['hO','sO','O_i, m, ℓ']].concat(s.i[0] === 0 ? [['hK','sKV','K_j, V_j']] : []);
+        case 'qk': return [['sQ','rS'],['sKV','rS','QKᵀ']];
+        case 'softmax': return [['rS','rP','exp2'],['rP','sM','merge'],['sM','rP','+ rescale']];
+        case 'pv': return [['rP','rO','P·V'],['sKV','rO'],['sO','rO','×(a·ℓ)'],['rO','hO','write back']];
+        default: return [];
+      }
+    }},
+  own(g, x, y, w, h, s, row){
+    text(g, 'Score tile S: 128 query rows × 64 keys, 4 warps, split-K (FA-1\'s way)', x, y + 10, C.ink, 11.5, 600);
+    const tx = x + 4, ty = y + 22, tw = 192, th = 104, hot = ['qk','softmax','pv'].includes(s.ph);
+    for (let wq = 0; wq < 4; wq++){
+      g.fillStyle = wcol(wq, hot ? 40 : 24); g.fillRect(tx + wq * 48, ty, 47, th);
+      text(g, `warp ${wq}`, tx + wq * 48 + 6, ty + 14, '#fff', 10.5, 600);
+      text(g, `keys ${16 * wq}–${16 * wq + 15}`, tx + wq * 48 + 4, ty + 28, '#dfe3ea', 9.5);
+    }
+    rowLine(g, tx, ty + (row + 0.5) / 128 * th, tw);
+    const merge = s.ph === 'softmax';
+    wrap(g, 'Every warp holds a piece of every row: its own partial max, sum and output over its 16 keys.', tx + tw + 12, ty + 6, w - tw - 20, 13, C.dim, 11);
+    wrap(g, merge ? '▶ now: write the 4 partials to shared memory → barrier for all 4 warps → read back, rescale and add. This repeats at every key tile.'
+                  : 'At every key tile: partials → smem → barrier → add (book Fig. 9.3, left).',
+         tx + tw + 12, ty + 62, w - tw - 20, 13, merge ? C.exp : C.dim, 11, merge ? 600 : 400);
+    text(g, `row ${row}: spread over all 4 warps`, tx, ty + th + 14, C.lane, 11);
+  },
+  rowOwner: r => `Row <code>${r}</code> of the query tile is in <b>all four warps</b> at once. Each warp holds the partial max, sum and output for its 16 keys. FA-1's CUDA kernel avoided 512 registers a thread for these partials by taking 16 query rows at a time against 128 keys. Its traits are <code>&lt;128, 128, 16, 1, 4&gt;</code>.`,
+  acct(s){
+    const d = {};
+    if (s.ph === 'load'){ d.rd = 128*D*2 + 128*D*4 + 128*8 + (s.i[0] === 0 ? 2*64*D*2 : 0); }
+    if (s.ph === 'qk') d.mm = 2*128*64*D;
+    if (s.ph === 'softmax'){ d.exp = 128*64; d.merge = 1; }
+    if (s.ph === 'pv'){ d.mm = 2*128*64*D; d.wr = 128*D*4 + 128*8; d.div = 128*D; }
+    return d;
+  },
+  sm:{gpu:'h100', blocks:32, perSm:1, text:'Book config (4,096 tokens, 32 heads, batch 1): <b>32 blocks</b>, one per head, so 32 of the 132 SMs are busy and 100 stay idle for the whole run. Each block walks its head\'s 32 query tiles one after another.'},
+  measured:[['T1 time (Triton re-implementation)','17.21 ms'],['rate','16.0 TFLOP/s · 1.6%'],['HBM traffic (Nsight)','10.3 GiB'],['stall, waiting for memory','4.04 cycles / instr']],
+};
+
+const FA1T = {
+  id:'fa1t', tab:'FA-1 · lecture17 Triton', group:'Chapter 8–9 · H100', gpu:'h100', Br:32, Bc:32, causal:'on', sel:'program (query tile)', rails:'serialT',
+  name:'FlashAttention "V1" in Triton: lecture17/flash_attention_triton.py',
+  meta:'B_r = B_c = 32, causal, fp32 inputs (torch.randn), allow_tf32=False. Grid = cdiv(N, 32) programs for a single head. At N = 1,024 program i walks key tiles 0 … i. Not timed on this page.',
+  blurb:'The course\'s own "V1" kernel is Algorithm 1 line for line inside the loop. Each tile has its own max <code>m_ij</code>, then a merge rescales the old and new parts by <code>exp(m − m_new)</code>, and <code>O_i</code> is <b>divided by <code>l_i_new</code> at every step</b>. The structure around the loop is FA-2\'s, though: <b>one program per query tile</b> (<code>pid</code>) and the K/V loop inside, so <code>O_i, m_i, l_i</code> stay in registers. In the book\'s ladder this is <b>T3</b> (FA-2\'s grid, still dividing every step). Two more things to see. The causal loop stops at <code>end_j</code>, so key tiles above the diagonal are never loaded. And the inputs are fp32 with <code>allow_tf32=False</code>, which (inference) runs <code>tl.dot</code> as IEEE fp32 on the FMA lanes, not on the tensor cores.',
+  capS:'Highlighted row = this program\'s 32-row query tile. Other rows are other programs, running at the same time. Tiles above the diagonal are never visited (end_j).',
+  order(sel){ const o = []; for (let j = 0; j <= sel; j++) o.push({i:[sel], j}); return o; },
+  rowsOf: sel => [sel],
+  selMax: () => TOK / 32 - 1,
+  stepLabel: s => `j = ${s.j * 32} (key tile ${s.j} of ${s.N})`,
+  code:[
+    L('pid = tl.program_id(axis=0)', 'init'),
+    L('offset_qn = (pid * B_r) + tl.arange(0, B_r)', 'init'),
+    L('Q_i = tl.load(pointer=block_ptrs_q, mask=mask_q, other=0.0)', 'init'),
+    L('l_i = tl.zeros((B_r, 1), dtype=tl.float32)', 'init'),
+    L("m_i = tl.full((B_r, 1), dtype=tl.float32, value=-float('inf'))", 'init'),
+    L('O_i = tl.zeros((B_r, d), dtype=tl.float32)', 'init'),
+    L('end_j = tl.minimum((pid + 1) * B_r, N)', 'init'),
+    L('for j in range(0, end_j, B_c):', 'load'),
+    L('    K_j = tl.load(pointer=block_ptrs_k, mask=mask_k, other=0.0)', 'load'),
+    L('    V_j = tl.load(pointer=block_ptrs_v, mask=mask_v, other=0.0)', 'load'),
+    L('    S_ij = tl.dot(Q_i, tl.trans(K_j), allow_tf32=False)', 'qk'),
+    L('    causal_mask = (offset_qn[:, None] >= offset_kn[None, :]) & (offset_kn[None, :] < N)', 'softmax'),
+    L("    S_ij = tl.where(causal_mask, S_ij, -float('inf'))", 'softmax'),
+    L('    m_ij = tl.max(S_ij, axis=1, keep_dims=True)', 'softmax'),
+    L('    P_ij = tl.exp(S_ij - m_ij)', 'softmax'),
+    L('    l_ij = tl.sum(P_ij, axis=1, keep_dims=True)', 'softmax'),
+    L('    m_i_new = tl.maximum(m_i, m_ij)', 'softmax'),
+    L('    l_i_new = (tl.exp(m_i - m_i_new) * l_i) + (tl.exp(m_ij - m_i_new) * l_ij)', 'softmax'),
+    L('    O_i = (l_i * tl.exp(m_i - m_i_new) * O_i) + (tl.exp(m_ij - m_i_new) * tl.dot(P_ij, V_j, allow_tf32=False))', 'pv'),
+    L('    O_i = (1.0 / l_i_new) * O_i', 'pv'),
+    L('    l_i = l_i_new', 'pv'),
+    L('    m_i = m_i_new', 'pv'),
+    L('tl.store(block_ptrs_o, value=O_i, mask=mask_o)', 'final'),
+  ],
+  src:'lecture17/flash_attention_triton.py · flash_attention_kernel (upstream commit a613b5d, "Lecture 17: Add FlashAttention V1 examples"). The cuTile and Helion versions in the same folder have the same loop.',
+  mem:{cols:['HBM','smem (Triton-managed)','registers'], boxes:[
+    {id:'hQ',c:0,r:0,t:'Q (fp32)'},{id:'hK',c:0,r:1,t:'K, V (fp32)'},{id:'hO',c:0,r:2,t:'O (fp32)'},
+    {id:'sQ',c:1,r:0,t:'Q_i operand'},{id:'sKV',c:1,r:1,t:'K_j, V_j operands'},
+    {id:'rS',c:2,r:0,t:'S_ij (32 × 32)'},{id:'rP',c:2,r:1,t:'P_ij'},{id:'rO',c:2,r:2,t:'O_i, m_i, l_i (whole loop)'}],
+    flows(s){
+      switch (s.ph){
+        case 'init': return [['hQ','sQ','Q_i once']];
+        case 'load': return [['hK','sKV','tl.load']];
+        case 'qk': return [['sQ','rS'],['sKV','rS','tl.dot']];
+        case 'softmax': return [['rS','rP','mask, exp']];
+        case 'pv': return [['rP','rO','tl.dot'],['sKV','rO','V_j']];
+        case 'final': return [['rO','hO','tl.store']];
+      }
+      return [];
+    }},
+  own(g, x, y, w, h, s, row){
+    text(g, 'One program: a 32 × 32 score tile against d = 128', x, y + 10, C.ink, 11.5, 600);
+    const tx = x + 4, ty = y + 22, sz = 96;
+    g.fillStyle = PH[s.ph] && ['qk','softmax','pv'].includes(s.ph) ? PH[s.ph].col : '#232a36'; g.globalAlpha = .55; g.fillRect(tx, ty, sz, sz); g.globalAlpha = 1;
+    g.strokeStyle = '#3a4152'; g.strokeRect(tx + .5, ty + .5, sz, sz);
+    if (s.j !== undefined && s.j === s.i[0]){ g.fillStyle = 'rgba(15,17,21,.75)'; g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + sz, ty); g.lineTo(tx + sz, ty + sz); g.closePath(); g.fill(); text(g, 'masked', tx + sz - 46, ty + 18, C.dim, 10); }
+    rowLine(g, tx, ty + (row + .5) / 32 * sz, sz);
+    wrap(g, 'num_warps is not set, so Triton uses its default of 4 and chooses which warp holds which element of the tile.', tx + sz + 14, ty + 4, w - sz - 24, 13, C.dim, 11);
+    wrap(g, 'fp32 Q, K, V and allow_tf32=False: tl.dot runs in IEEE fp32. Inference: that is FMA-lane math, not tensor cores. Check the TTGIR or SASS for mma instructions.', tx + sz + 14, ty + 52, w - sz - 24, 13, C.fma, 11);
+  },
+  rowOwner: r => `Row <code>${r}</code> is row <code>offset_qn = pid·32 + ${r}</code>. Its <code>m_i</code>, <code>l_i</code> and its 128 output numbers stay in this program's registers for the whole loop. Triton decides which threads hold them.`,
+  acct(s){
+    const d = {}, B = 32;
+    if (s.ph === 'init') d.rd = B*D*4;
+    if (s.ph === 'load') d.rd = 2*B*D*4;
+    if (s.ph === 'qk') d.mm = 2*B*B*D;
+    if (s.ph === 'softmax') d.exp = B*B;
+    if (s.ph === 'pv'){ d.mm = 2*B*B*D; d.div = B*D; }
+    if (s.ph === 'final') d.wr = B*D*4;
+    return d;
+  },
+  sm:{gpu:'h100', blocks:64, perSm:1, text:'The lecture\'s benchmark runs <b>one head</b>, so the grid is cdiv(N, 32) programs: 64 at N = 2,048 (drawn here), 8,192 at N = 262,144. At the shortest length the grid does not fill the H100 either. How many programs fit on an SM depends on what Triton compiles, which was not measured.'},
+  measured:[['book ladder rung','T3: FA-2 grid, divide every step'],['T3 at 4,096 tok, 32 heads (Triton, bf16)','0.826 ms · 33.6%'],['this kernel','fp32, causal: not timed here']],
+};
+
+const FA2 = {
+  id:'fa2', tab:'FA-2', group:'Chapter 8–9 · H100', gpu:'h100', Br:128, Bc:64, causal:'toggle', sel:'blockIdx (query tile)', rails:'serial',
+  name:'FlashAttention-2, the CUDA kernel PyTorch ships',
+  meta:'Flash_fwd_kernel_traits<128, 128, 64, 4, …>: 128 query rows × 64 keys, 4 warps, 128 threads, 255 registers, 2 blocks per SM. Measured at 4,096 tokens: 0.785 ms, 350 TFLOP/s, 35.4% (mma.sync; spills 455 MiB).',
+  blurb:'FA-2 makes three changes. (1) The loops are swapped, and the outer loop becomes the <b>grid</b>: one block per query tile of every head, so 1,024 blocks fill all 132 SMs. (2) Inside a block each warp owns <b>whole rows</b> (split-Q), so no warp ever merges partial rows. (3) O stays <b>unnormalised</b> and is divided by ℓ <b>once</b>, at the end, which also yields the LSE the backward pass needs. In this source the key loop runs <b>right to left</b> (<code>n_block = n_block_max − 1; --n_block</code>), so with the causal mask the masked diagonal tiles come first. Each warp still runs multiply → softmax → multiply <b>in series</b>, so the tensor cores wait during every softmax. The unit rails below show that gap.',
+  capS:'Yellow row = this block\'s query tile. Other rows are other blocks, which run at the same time on other SMs. The key loop runs right to left, as in the source.',
+  order(sel, causal){ const nmax = causal ? Math.min(16, (sel + 1) * 2) : 16; const o = []; for (let n = nmax - 1; n >= 0; n--) o.push({i:[sel], j:n}); return o; },
+  rowsOf: sel => [sel],
+  selMax: () => 7,
+  stepLabel: s => `n_block = ${s.j} (${s.n + 1} of ${s.N})`,
+  code:[
+    L('// flash_fwd_kernel.h — compute_attn_1rowblock(params, bidb, bidh, m_block)', 'init', true),
+    L('// grid = (num_m_block, batch, heads): one block per query tile of every head', 'init', true),
+    L('int n_block = n_block_max - 1;', 'init'),
+    L('for (; n_block >= n_block_min; --n_block) {', 'load'),
+    L('    clear(acc_s);', 'qk'),
+    L('    FLASH_NAMESPACE::cp_async_wait<0>();  __syncthreads();', 'load'),
+    L('    FLASH_NAMESPACE::copy</*Is_even_MN=*/true, Is_even_K>(gmem_tiled_copy_QKV, tVgV(_, _, _, n_block), tVsV, tKVcKV, tKVpKV);', 'load'),
+    L('    cute::cp_async_fence();', 'load'),
+    L('    FLASH_NAMESPACE::gemm</*A_in_regs=*/Kernel_traits::Is_Q_in_regs>(', 'qk'),
+    L('        acc_s, tSrQ, tSrK, tSsQ, tSsK, tiled_mma, smem_tiled_copy_Q, smem_tiled_copy_K, ...);', 'qk'),
+    L('    FLASH_NAMESPACE::cp_async_wait<0>();  __syncthreads();', 'qk'),
+    L('    if (n_block > n_block_min) { copy(..., tKgK(_, _, _, n_block - 1), tKsK, ...); cp_async_fence(); }', 'load'),
+    L('    mask.template apply_mask</*Causal_mask=*/false>(', 'softmax'),
+    L('        acc_s, n_block * kBlockN, m_block * kBlockM + (tidx / 32) * 16 + (tidx % 32) / 4, kNWarps * 16);', 'softmax'),
+    L('    softmax.template softmax_rescale_o</*Is_first=*/false, /*Check_inf=*/Is_local>(acc_s, acc_o, params.scale_softmax_log2);', 'softmax'),
+    L('    Tensor rP = FLASH_NAMESPACE::convert_type<Element>(acc_s);', 'pv'),
+    L('    FLASH_NAMESPACE::gemm_rs(acc_o, tOrP, tOrVt, tOsVt, tiled_mma, smem_tiled_copy_V, smem_thr_copy_V);', 'pv'),
+    L('}', ''),
+    L('Tensor lse = softmax.template normalize_softmax_lse<Is_dropout>(acc_o, params.scale_softmax, params.rp_dropout);', 'final'),
+    L('Tensor rO = FLASH_NAMESPACE::convert_type<Element>(acc_o);   // fp32 -> bf16, then smem -> HBM', 'final'),
+    L('// softmax.h — softmax_rescale_o (not the first tile)', 'softmax', true),
+    L('FLASH_NAMESPACE::template reduce_max</*zero_init=*/false>(scores, row_max);', 'softmax'),
+    L('float scores_scale = exp2f((scores_max_prev(mi) - scores_max_cur) * softmax_scale_log2);', 'softmax'),
+    L('row_sum(mi) *= scores_scale;', 'softmax'),
+    L('for (int ni = 0; ni < size<1>(acc_o_rowcol); ++ni) { acc_o_rowcol(mi, ni) *= scores_scale; }', 'softmax'),
+    L('FLASH_NAMESPACE::scale_apply_exp2(scores, row_max, softmax_scale_log2);', 'softmax'),
+    L("// We don't do the reduce across threads here since we don't need to use the row_sum.", 'softmax'),
+    L('FLASH_NAMESPACE::reduce_sum</*zero_init=*/false>(scores, row_sum);', 'softmax'),
+  ],
+  src:'vllm-project/flash-attention @ 8dd9eae · csrc/flash_attn/src/flash_fwd_kernel.h L274–441, softmax.h L137–167 (the no-mask loop. With the causal mask an earlier loop of the same shape handles the masked tiles first).',
+  mem:{cols:['HBM','shared memory','registers'], boxes:[
+    {id:'hQ',c:0,r:0,t:'Q (bf16)'},{id:'hK',c:0,r:1,t:'K, V (bf16)'},{id:'hO',c:0,r:2,t:'O (bf16) + LSE'},
+    {id:'sQ',c:1,r:0,t:'Q_i (32 KiB)'},{id:'sKV',c:1,r:1,t:'K_j, V_j (16 KiB each)'},{id:'sO',c:1,r:2,t:'O staging (reuses sQ)'},
+    {id:'rS',c:2,r:0,t:'acc_s (64 regs/thr)'},{id:'rP',c:2,r:1,t:'rP = bf16(P)'},{id:'rO',c:2,r:2,t:'acc_o (128 regs/thr)'}],
+    flows(s){
+      switch (s.ph){
+        case 'init': return [['hQ','sQ','Q_i'],['hK','sKV','K first']];
+        case 'load': return [['hK','sKV','cp.async']];
+        case 'qk': return [['sQ','rS','ldmatrix'],['sKV','rS','mma.sync']];
+        case 'softmax': return [['rS','rP','exp2f'],['rO','rO','×scale']];
+        case 'pv': return [['rP','rO','mma.sync'],['sKV','rO','Vᵀ']];
+        case 'final': return [['rO','sO','÷ℓ, bf16'],['sO','hO','O, LSE']];
+      }
+      return [];
+    }},
+  own(g, x, y, w, h, s, row){
+    text(g, 'Score tile: 128 rows × 64 keys, 4 warps, split-Q (whole rows)', x, y + 10, C.ink, 11.5, 600);
+    const tx = x + 4, ty = y + 22, tw = 128, th = 112, hot = ['qk','softmax','pv'].includes(s.ph);
+    for (let st = 0; st < 8; st++){
+      const wq = st % 4; g.fillStyle = wcol(wq, hot ? 40 : 24); g.fillRect(tx, ty + st * 14, tw, 13);
+      text(g, `w${wq}  rows ${16 * st}–${16 * st + 15}`, tx + 4, ty + st * 14 + 10, '#fff', 9.5);
+    }
+    rowLine(g, tx, ty + (row + .5) / 128 * th, tw);
+    wrap(g, 'Warp w owns rows 16w…16w+15 and 64+16w…64+16w+15 (apply_mask: row = m_block·128 + (tidx/32)·16 + (tidx%32)/4, stride kNWarps·16 = 64).', tx + tw + 12, ty + 4, w - tw - 20, 13, C.dim, 11);
+    wrap(g, s.ph === 'softmax' ? '▶ each warp finishes its own rows: max, exp2, sum. Nothing is written to smem and there is no barrier for the softmax.' : 'Warps share only what they read: K_j and V_j in shared memory.', tx + tw + 12, ty + 70, w - tw - 20, 13, s.ph === 'softmax' ? C.exp : C.dim, 11, s.ph === 'softmax' ? 600 : 400);
+  },
+  rowOwner(r){ const w = Math.floor((r % 64) / 16), rr = r % 16, q = rr % 8; return `Row <code>${r}</code> → <b>warp ${w}</b>, lanes <code>${4*q}–${4*q+3}</code> (a quad), accumulator ${rr < 8 ? 'c0/c1' : 'c2/c3'} of the m16n8k16 layout. The row's 64 scores and 128 outputs are spread over those 4 lanes, so the row max needs a quad all-reduce. The row-sum reduce is deferred to <code>normalize_softmax_lse</code> at the end.`; },
+  acct(s){
+    const d = {};
+    if (s.ph === 'init') d.rd = 128*D*2;
+    if (s.ph === 'load') d.rd = 2*64*D*2;
+    if (s.ph === 'qk') d.mm = 2*128*64*D;
+    if (s.ph === 'softmax') d.exp = 128*64;
+    if (s.ph === 'pv') d.mm = 2*128*64*D;
+    if (s.ph === 'final'){ d.div = 128*D; d.wr = 128*D*2 + 128*4; }
+    return d;
+  },
+  sm:{gpu:'h100', blocks:1024, perSm:2, text:'<b>1,024 blocks</b> (32 query tiles × 32 heads). At 128 threads × 255 registers, two fit on an SM: 264 at once, so the grid runs in 1,024 ÷ 264 = <b>3.9 waves</b>, about 7.8 tiles per SM. Nsight counted 128.4 SMs\' worth of active cycles.'},
+  measured:[['PyTorch FA-2 (mma.sync)','0.785 ms · 350 · 35.4%'],['tensor pipe busy / delivered','54.5% / 36.3%'],['our T4 (Triton, wgmma)','0.534 ms · 515 · 52.1%'],['causal, 4,096 tok','0.505 ms (1.55× faster)']],
+};
+
+const FA3 = {
+  id:'fa3', tab:'FA-3', group:'Chapter 8–9 · H100', gpu:'h100', Br:128, Bc:176, causal:'toggle', sel:'query tile (this CTA\'s work)', rails:'pp3',
+  name:'FlashAttention-3 (FlashAttnFwdSm90), what vLLM runs on Hopper',
+  meta:'Tiles of 128 query rows × 176 keys, a ring of 2 stages, 384 threads (3 warpgroups), 211 KiB of shared memory, 132 persistent blocks. Measured at 4,096 tokens: 0.383 ms, 717 TFLOP/s, 72.5% of 989.',
+  blurb:'FA-3 keeps FA-2\'s algorithm and gives the warpgroups <b>jobs</b>. A <b>producer</b> warpgroup only copies: one thread asks the TMA for each K/V tile, ahead of time, into a <b>ring of two buffers</b> guarded by "full" and "empty" barriers. Two <b>consumer</b> warpgroups own 64 rows each and run <code>wgmma</code>, which is asynchronous. <code>setmaxnreg</code> moves registers from the producer (24 per thread) to the consumers (240). Two overlaps fill the tensor cores\' idle time. <b>Ping-pong</b>: consumer A\'s softmax runs during B\'s multiplications. <b>Intra-warpgroup</b>: a consumer issues S<sub>j</sub> = Q·K<sub>j</sub>ᵀ and P·V of the previous tile together, then runs softmax(S<sub>j</sub>) while P·V is still running. 1,024 ÷ 176 is not a whole number, so the last key tile is <b>padded</b> (hatched).',
+  capS:'176-key tiles: 6 per row at N = 1,024, and the last is padded past N (hatched). The key loop runs right to left.',
+  order(sel, causal){ const Tc = ceil(TOK / 176), nmax = causal ? Math.min(Tc, ceil((sel + 1) * 128 / 176)) : Tc; const o = []; for (let n = nmax - 1; n >= 0; n--) o.push({i:[sel], j:n}); return o; },
+  rowsOf: sel => [sel],
+  selMax: () => 7,
+  stepLabel: s => `n_block = ${s.j} (${s.n + 1} of ${s.N}) · ring buffer ${s.n % 2}`,
+  code:[
+    L('// flash_fwd_kernel_sm90.h — 384 threads: warpgroup 0 = producer, 1 and 2 = consumers', 'init', true),
+    L('if (warp_group_idx == 0) {  // Producer', 'init load'),
+    L('    cutlass::arch::warpgroup_reg_dealloc<LoadRegisterRequirement>();   // 24 regs/thread', 'init'),
+    L('    // mainloop_fwd_sm90_tma_gmma_ws.hpp — load_K / load_V, one thread issues', 'load', true),
+    L('    pipeline_k.producer_acquire(smem_pipe_write);                // wait for "empty"', 'load'),
+    L('    copy(params.tma_load_K.with(*pipeline_k.producer_get_barrier(smem_pipe_write), mcast_mask_kv, TMA::CacheHintSm90::EVICT_LAST),', 'load'),
+    L('        tKgK_TMA(_, n_block_idx, bidb_kv_idx), tKsK_TMA(_, smem_pipe_write.index()));', 'load'),
+    L('} else {  // Consumer', 'init'),
+    L('    cutlass::arch::warpgroup_reg_alloc<MmaRegisterRequirement>();      // 240 regs/thread', 'init'),
+    L('    int n_block = n_block_max - 1;', 'init'),
+    L('    // Each step does gemm0 for iter n_block, gemm1 for iter n_block + 1, and softmax for iter n_block.', 'qk', true),
+    L('    if (!UseSchedulerBarrier || warp_group_idx == 0) { consumer_wait(pipeline_k, smem_pipe_read); }', 'qk'),
+    L('    warp_scheduler_barrier_sync();                               // ping-pong: wait for my turn', 'qk'),
+    L('    flash::gemm</*zero_init=*/true, /*wg_wait=*/-1>(tiled_mma_qk, tSrQ, tSrK(_, _, _, smem_pipe_read.index()), tSrS);', 'qk'),
+    L('    flash::gemm</*zero_init=*/false, /*wg_wait=*/-1>(tiled_mma_pv, ..., tOrV(_, _, _, smem_pipe_read_v.index()), tOrO);', 'qk pv'),
+    L('    warp_scheduler_barrier_arrive();                             // hand the tensor cores to the other WG', 'qk'),
+    L('    warpgroup_wait<1>();                                          // S is ready, P·V may still run', 'softmax'),
+    L('    pipeline_k.consumer_release(smem_pipe_read);  // release K', 'softmax'),
+    L('    cute::copy(softmax.template max_get_scale</*Is_first=*/false, Check_inf>(tSrS), scores_scale);', 'softmax'),
+    L('    softmax.template online_softmax</*Is_first=*/false, Check_inf>(tSrS);', 'softmax'),
+    L('    warpgroup_wait<0>();', 'pv'),
+    L('    pipeline_v.consumer_release(smem_pipe_read_v);  // release V', 'pv'),
+    L('    convert_type_out(make_tensor(tSrS.data(), tOrP.layout()), tOrP);', 'pv'),
+    L('    softmax.rescale_o(tOrO, scores_scale);', 'pv'),
+    L('    // epilogue: O / l, write O and LSE to HBM once', 'final', true),
+    L('}', ''),
+  ],
+  src:'vllm-project/flash-attention @ 8dd9eae · hopper/flash_fwd_kernel_sm90.h L86–87, L320–376 · hopper/mainloop_fwd_sm90_tma_gmma_ws.hpp L836–842 (load_K), L1303–1345 (fwd_step).',
+  mem:{cols:['HBM','shared memory','consumer registers'], boxes:[
+    {id:'hQ',c:0,r:0,t:'Q (bf16)'},{id:'hK',c:0,r:1,t:'K, V (bf16)'},{id:'hO',c:0,r:2,t:'O + LSE'},
+    {id:'sQ',c:1,r:0,t:'Q tile, 128 rows (once)'},{id:'b0',c:1,r:1,t:'ring buffer 0: K, V'},{id:'b1',c:1,r:2,t:'ring buffer 1: K, V'},
+    {id:'rS',c:2,r:0,t:'S (64 × 176 per WG)'},{id:'rP',c:2,r:1,t:'P (bf16, regs)'},{id:'rO',c:2,r:2,t:'O (240 regs/thr)'}],
+    flows(s){
+      const b = s.n % 2 ? 'b1' : 'b0';
+      switch (s.ph){
+        case 'init': return [['hQ','sQ','TMA, Q once']];
+        case 'load': return [['hK', b, 'TMA (1 thread)']];
+        case 'qk': return [['sQ','rS','wgmma'],[b,'rS','async'],['rP','rO','P·V prev']];
+        case 'softmax': return [['rS','rP','exp2']];
+        case 'pv': return [[b,'rO','V'],['rO','rO','rescale']];
+        case 'final': return [['rO','hO','÷ℓ, store']];
+      }
+      return [];
+    }},
+  own(g, x, y, w, h, s, row){
+    text(g, 'Three warpgroups, 384 threads (setmaxnreg)', x, y + 10, C.ink, 11.5, 600);
+    const tx = x + 4, ty = y + 20, bw = 300, bh = 24, pp = (s.n || 0) % 2;
+    let A = s.ph === 'qk' ? (pp ? 'softmax (prev)' : 'wgmma: S_j + P·V_prev') : s.ph === 'softmax' ? (pp ? 'wgmma: S_j + P·V_prev' : 'online softmax (exp2)') : s.ph === 'pv' ? 'wait P·V, release V, rescale O' : '—';
+    let B = s.ph === 'qk' ? (pp ? 'wgmma: S_j + P·V_prev' : 'softmax (prev)') : s.ph === 'softmax' ? (pp ? 'online softmax (exp2)' : 'wgmma: S_j + P·V_prev') : s.ph === 'pv' ? 'wait P·V, release V, rescale O' : '—';
+    const edge = s.ph === 'init' ? 'setmaxnreg → 240; wait for Q "full"' : s.ph === 'final' ? 'epilogue: O ÷ ℓ, write O and LSE' : null;
+    if (edge){ A = edge; B = edge; }
+    const rowsWG = [
+      {t:'WG0 producer · 24 regs', act: s.ph === 'load' || s.ph === 'init' ? 'TMA: K_j, V_j → ring' : 'waits for an "empty" buffer', col:C.copy, on: s.ph === 'load' || s.ph === 'init'},
+      {t:'WG1 consumer A · rows 0–63 · 240 regs', act:A, col: A.startsWith('wgmma') ? C.tc : A.startsWith('online') ? C.exp : edge ? (s.ph === 'final' ? C.st : C.copy) : C.pv, on: A !== '—', sel: row < 64},
+      {t:'WG2 consumer B · rows 64–127 · 240 regs', act:B, col: B.startsWith('wgmma') ? C.tc : B.startsWith('online') ? C.exp : edge ? (s.ph === 'final' ? C.st : C.copy) : C.pv, on: B !== '—', sel: row >= 64}];
+    rowsWG.forEach((r, q) => {
+      const yy = ty + q * (bh + 6);
+      g.fillStyle = r.on ? r.col : '#232a36'; g.globalAlpha = r.on ? .8 : 1; g.fillRect(tx, yy, bw, bh); g.globalAlpha = 1;
+      if (r.sel){ g.strokeStyle = C.lane; g.lineWidth = 2; g.strokeRect(tx + 1, yy + 1, bw - 2, bh - 2); g.lineWidth = 1; }
+      text(g, r.t, tx + 6, yy + 10, r.on ? '#0f1115' : C.ink, 10, 600);
+      text(g, r.act, tx + 6, yy + 21, r.on ? '#0f1115' : C.dim, 10);
+    });
+    const bx = tx + bw + 16, cur = (s.n || 0) % 2;
+    text(g, 'smem ring', bx, ty + 8, C.dim, 10.5);
+    [0, 1].forEach(b => {
+      let st = 'empty', col = '#232a36';
+      if (s.ph === 'load'){ st = b === cur ? 'TMA filling' : 'V in use'; col = b === cur ? C.copy : '#2b3446'; }
+      else if (s.ph === 'qk' || s.ph === 'softmax'){ st = b === cur ? 'full: read' : 'next fill'; col = b === cur ? C.tc : '#232a36'; }
+      else if (s.ph === 'pv'){ st = b === cur ? '→ empty' : 'next fill'; col = b === cur ? C.pv : '#232a36'; }
+      const yy = ty + 14 + b * 40;
+      g.fillStyle = col; g.globalAlpha = .75; g.fillRect(bx, yy, 110, 32); g.globalAlpha = 1;
+      text(g, `buffer ${b}`, bx + 6, yy + 13, '#fff', 10.5, 600); text(g, st, bx + 6, yy + 26, '#e6e8ee', 10);
+    });
+    wrap(g, '384 × 168 = 64,512 regs at launch → 128 × 24 (producer) + 256 × 240 (consumers) after setmaxnreg.', tx, ty + 98, w - 10, 13, C.dim, 10.5);
+  },
+  rowOwner(r){ const wg = r < 64 ? 'A (warpgroup 1)' : 'B (warpgroup 2)', rr = r % 64; return `Row <code>${r}</code> → consumer <b>${wg}</b>, warp ${Math.floor(rr / 16)} of its warpgroup (one wgmma covers 64 rows, 16 per warp). As in FA-2, a row lives in a quad of lanes. Its max, sum and output never leave that warpgroup, and the output is divided once, in the epilogue.`; },
+  acct(s){
+    const d = {};
+    if (s.ph === 'init') d.rd = 128*D*2;
+    if (s.ph === 'load') d.rd = 2*176*D*2;
+    if (s.ph === 'qk') d.mm = 2*2*128*176*D;
+    if (s.ph === 'softmax') d.exp = 128*176;
+    if (s.ph === 'final'){ d.div = 128*D; d.wr = 128*D*2 + 128*4; }
+    return d;
+  },
+  sm:{gpu:'h100', blocks:132, perSm:1, text:'<b>132 persistent blocks</b> of 384 threads, one per SM, each with 211 KiB of shared memory and clusters of 2. A tile scheduler hands each block query tiles until none are left (1,024 ÷ 132 ≈ 7.8 each): a fixed order without the mask, a dynamic one with it.'},
+  measured:[['FA-3 BF16','0.383 ms · 717 · 72.5%'],['tensor pipe busy / delivered','81.5% / 79.1%'],['exponential (XU) pipe busy','43.6% (FA-2: 20.0%)'],['causal, 4,096 tok','0.210 ms'],['FP8, 4,096 tok','0.312 ms · 882']],
+};
+
+const EMU = [
+  {v:'0', t:'0% (exponential unit only): 16.0 / cycle', rate:16.0},
+  {v:'18.75', t:'18.75% (shipped, no mask): 19.3 / cycle', rate:19.3},
+  {v:'55', t:'55% (best in an exponentials-only test): 25.6 / cycle', rate:25.6},
+  {v:'100', t:'100% (all on FMA, paired): 16.89 / cycle', rate:16.89},
+];
+
+const FA4 = {
+  id:'fa4', tab:'FA-4', group:'Chapter 10 · B200', gpu:'b200', Br:128, Bc:128, causal:'toggle', sel:'CTA work unit (2 query tiles)', rails:'pp4',
+  name:'FlashAttention-4 (FlashAttentionForwardSm100), CuTe DSL',
+  meta:'Each block owns 2 query tiles of 128 rows (256 rows) against 128-key tiles. 512 threads in 16 warps, 128 registers each, 148 persistent blocks. Measured at 4,096 tokens on the B200: 0.230 ms, 1,193 TFLOP/s, 53.0% of 2,250.',
+  blurb:'On the B200 the tensor cores do <b>8,192</b> operations per SM per cycle, twice the H100, while the exponential unit still does <b>16</b>. A 128 × 128 tile now needs 1,024 cycles of multiplication and 1,024 of exponentials, so <b>neither can hide under the other</b>, and every other step of the softmax adds to the tile. FA-4 responds in three ways. (1) It computes <b>part of each row\'s 2<sup>x</sup> on the FMA pipe</b>: n = ⌊x⌋ goes into the exponent bits, and 2<sup>f</sup> comes from a cubic by Horner\'s rule. (2) It <b>rescales only when a row\'s max grows by more than 8 in log₂</b>, which is safe because the final ÷ℓ cancels any reference that ℓ and O share. (3) It reorganises the block around <b>tensor memory</b>. One thread issues every <code>tcgen05.mma</code>. S, P and O live in TMEM. Two softmax warpgroups (one row per thread) take turns, and a separate correction warpgroup does the rare rescales off the critical path.',
+  capS:'This block works on two query tiles at once (yellow). 128-key tiles, right to left. With the mask, a tile entirely above the diagonal is skipped for the query tile that would see none of it.',
+  order(sel, causal){ const nmax = causal ? Math.min(8, (sel + 1) * 2) : 8; const o = []; for (let n = nmax - 1; n >= 0; n--) o.push({i:[2 * sel, 2 * sel + 1], j:n}); return o; },
+  rowsOf: sel => [2 * sel, 2 * sel + 1],
+  selMax: () => 3,
+  stepLabel: s => `key tile ${s.j} (${s.n + 1} of ${s.N}) · query tiles ${s.i[0]}, ${s.i[1]}`,
+  code:[
+    L('# flash_fwd_sm100.py — warp roles (16 warps, 512 threads)', 'init', true),
+    L('self.softmax0_warp_ids = (0, 1, 2, 3)', 'init softmax'),
+    L('self.softmax1_warp_ids = (4, 5, 6, 7)', 'init softmax'),
+    L('self.correction_warp_ids = (8, 9, 10, 11)', 'init final'),
+    L('self.mma_warp_id = 12', 'init qk pv'),
+    L('self.epilogue_warp_ids = (13,)', 'init final'),
+    L('self.load_warp_ids = (14,)', 'init load'),
+    L('self.empty_warp_ids = (15,)', 'init'),
+    L('self.tmem_s_offset = [0, self.n_block_size]  # e.g., 0, 128', 'qk'),
+    L('self.tmem_o_offset = [self.tmem_s_offset[-1] + self.n_block_size + i * self.head_dim_v_padded', 'pv final'),
+    L('                      for i in range(self.q_stage)]  # e.g., 256, 384', 'pv final'),
+    L('self.tmem_s_to_p_offset = self.n_block_size // 2       # P (bf16) over the 2nd half of S', 'softmax'),
+    L('rescale_threshold = 8.0 if const_expr(self.q_dtype.width == 16) else 0.0', 'init'),
+    L('# softmax_step — one row per thread', 'softmax', true),
+    L('row_max, acc_scale = softmax.update_row_max(tSrS_t2r.load(), is_first)', 'softmax'),
+    L('    acc_scale_ = (row_max_old - row_max_safe) * self.scale_log2        # softmax.py', 'softmax'),
+    L('    if acc_scale_ >= -self.rescale_threshold:                          # jump ≤ 8 in log2:', 'softmax'),
+    L('        row_max_new = row_max_old; row_max_safe = row_max_old; acc_scale = 1.0   # keep stale max', 'softmax'),
+    L('sScale[thread_idx + sm_stats_index * self.m_block_size] = acc_scale   # hand to correction WG', 'softmax'),
+    L('softmax.scale_subtract_rowmax(tSrS_t2r, row_max)', 'softmax'),
+    L('softmax.apply_exp2_convert(tSrS_t2r, tSrP_r2t, ex2_emu_freq=self.ex2_emu_freq, ex2_emu_start_frg=self.ex2_emu_start_frg)', 'softmax'),
+    L('cute.copy(thr_tmem_store, tSrP_r2t_f32[None, None, i], tStP_r2t[None, None, i])   # P -> TMEM', 'softmax'),
+    L('pipeline_s_p_o.consumer_release_w_index(s_p_o_index)   # MMA warp may issue O += P·V', 'pv'),
+    L('# correction warpgroup', 'pv', true),
+    L('should_rescale = cute.arch.vote_ballot_sync(scale < 1.0) != 0', 'pv'),
+    L('# utils.py — ex2_emulation: 2^x on the FMA pipe', 'softmax', true),
+    L('x_rounded = add_round_down(x_clamped, fp32_round_int, loc=loc, ip=ip)   # floor(x) in low bits', 'softmax'),
+    L('x_frac = x_clamped - x_rounded_back', 'softmax'),
+    L('x_frac_ex2 = evaluate_polynomial(x_frac, POLY_EX2[poly_degree], loc=loc, ip=ip)   # cubic, Horner', 'softmax'),
+    L('return combine_int_frac_ex2(x_rounded, x_frac_ex2, loc=loc, ip=ip)   # n << 23 added to the bits', 'softmax'),
+  ],
+  src:'vllm-project/flash-attention @ 8dd9eae · flash_attn/cute/flash_fwd_sm100.py L325–404, L2377, L2697–2744, L2919 · softmax.py L375–392 · utils.py L821–835.',
+  mem:{cols:['HBM','shared memory','tensor memory (256 KB)'], boxes:[
+    {id:'hQ',c:0,r:0,t:'Q (bf16)'},{id:'hK',c:0,r:1,t:'K, V (bf16)'},{id:'hO',c:0,r:2,t:'O + LSE'},
+    {id:'sQ',c:1,r:0,t:'Q tile 0, Q tile 1'},{id:'sKV',c:1,r:1,t:'K_j, V_j ring'},{id:'sO',c:1,r:2,t:'O staging'},
+    {id:'tS',c:2,r:0,t:'S0 | S1 (cols 0–255)'},{id:'tP',c:2,r:1,t:'P0 | P1 over S'},{id:'tO',c:2,r:2,t:'O0 | O1 (cols 256–511)'}],
+    flows(s){
+      switch (s.ph){
+        case 'init': return [['hQ','sQ','TMA, 2 tiles']];
+        case 'load': return [['hK','sKV','TMA (load warp)']];
+        case 'qk': return [['sQ','tS','tcgen05.mma'],['sKV','tS','1 thread']];
+        case 'softmax': return [['tS','tP','regs: exp2']];
+        case 'pv': return [['tP','tO','P from TMEM'],['sKV','tO','V']];
+        case 'final': return [['tO','sO','÷ℓ (correction)'],['sO','hO','TMA store']];
+      }
+      return [];
+    }},
+  own(g, x, y, w, h, s, row){
+    text(g, '16 warps by role, and the tensor-memory layout', x, y + 10, C.ink, 11.5, 600);
+    const tx = x + 4, ty = y + 18, cw = 27;
+    const role = wq => wq < 4 ? ['S0', C.exp] : wq < 8 ? ['S1', C.exp] : wq < 12 ? ['corr', C.corr] : wq === 12 ? ['MMA', C.tc] : wq === 13 ? ['epi', C.st] : wq === 14 ? ['load', C.copy] : ['idle', '#3a4152'];
+    const act = {init:[14], load:[14], qk:[12], softmax:[0,1,2,3,4,5,6,7], pv:[12,8,9,10,11], final:[8,9,10,11,13]}[s.ph] || [];
+    for (let wq = 0; wq < 16; wq++){
+      const [nm, col] = role(wq), on = act.includes(wq);
+      g.fillStyle = col; g.globalAlpha = on ? .9 : .25; g.fillRect(tx + wq * cw, ty, cw - 2, 26); g.globalAlpha = 1;
+      text(g, String(wq), tx + wq * cw + 4, ty + 11, on ? '#0f1115' : C.ink, 9.5, 600);
+      text(g, nm, tx + wq * cw + 2, ty + 22, on ? '#0f1115' : C.dim, 8.5);
+    }
+    const sel = (row >= 0 && row < 128) ? row : 0;
+    if (s.ph === 'softmax') text(g, 'WG0 (query tile 0), then WG1 (query tile 1): turns, so their exponentials never overlap', tx, ty + 40, C.exp, 10.5, 600);
+    else if (s.ph === 'pv') text(g, 'correction WG: vote_ballot_sync(scale < 1) → rescale O in TMEM only if some row needs it', tx, ty + 40, C.corr, 10.5, 600);
+    else text(g, 'one elected thread of warp 12 issues every tcgen05.mma; results land in TMEM', tx, ty + 40, C.dim, 10.5);
+    const my = ty + 54, mw = 432, sc = mw / 512;
+    const segs = [[0,128,'S0',C.tc,'qk'],[128,256,'S1',C.tc,'qk'],[256,384,'O0',C.pv,'pv'],[384,512,'O1',C.pv,'pv'],[64,128,'P0',C.exp,'softmax'],[192,256,'P1',C.exp,'softmax']];
+    for (const [a, b, nm, col, ph] of segs){
+      const on = s.ph === ph || (s.ph === 'final' && nm[0] === 'O');
+      g.fillStyle = col; g.globalAlpha = on ? .85 : .22; g.fillRect(tx + a * sc, nm[0] === 'P' ? my + 14 : my, (b - a) * sc - 1, nm[0] === 'P' ? 14 : 28); g.globalAlpha = 1;
+      text(g, nm, tx + a * sc + 4, nm[0] === 'P' ? my + 25 : my + 11, on ? '#0f1115' : C.ink, 9.5, 600);
+    }
+    rowLine(g, tx, my + 32 + 2, mw);
+    text(g, 'columns 0 … 511 (32-bit) × 128 lanes = 256 KB · lane = query row = thread of its softmax WG', tx, my + 47, C.dim, 10);
+    text(g, `row ${sel} of each tile → TMEM lane ${sel}, thread ${sel % 128} of WG0 / WG1 (warp ${Math.floor(sel / 32)})`, tx, my + 61, C.lane, 10.5);
+  },
+  rowOwner: r => `Row <code>${r}</code> of query tile 0 is <b>thread ${r} of softmax WG0</b> (warp ${Math.floor(r / 32)}), and the same row of tile 1 is thread ${r} of WG1. That thread owns the <b>whole row</b>: it copies 128 scores from TMEM lane ${r} into registers, finds their max, computes 128 exponentials (about 24 of them by the FMA recipe), sums them, and writes 128 bf16 weights back over columns 64–127 of the same lane. No shuffle or quad reduce is needed.`,
+  acct(s, causal){
+    const d = {};
+    const live = s.i ? s.i.filter(i => !tstat(FA4, i, s.j, causal).skip).length : 0;
+    if (s.ph === 'init') d.rd = 2*128*D*2;
+    if (s.ph === 'load') d.rd = 2*128*D*2;
+    if (s.ph === 'qk') d.mm = live*2*128*128*D;
+    if (s.ph === 'softmax') d.exp = live*128*128;
+    if (s.ph === 'pv') d.mm = live*2*128*128*D;
+    if (s.ph === 'final'){ d.div = 2*128*D; d.wr = 2*(128*D*2 + 128*4); }
+    return d;
+  },
+  sm:{gpu:'b200', blocks:148, perSm:1, text:'<b>148 persistent blocks</b> of 512 threads, one per B200 SM, using the whole register file (512 × 128 = 65,536). Each work unit is 2 query tiles. For heads of 128 without the mask, the kernel uses the 2-CTA form of the multiplication that two SMs run together.'},
+  measured:[['FA-4 on B200','0.230 ms · 1,193 · 53.0%'],['best (8,192 / 32,768 tok)','1,457 · 64.8%'],['exp share on FMA: 0% / 12.5% vs shipped','+1.6–2.8% / −1.8–2.8%'],['threshold 0 (always rescale)','7–16% slower'],['rescales, Qwen3-8B (warps)','2.9% of steps vs 23.4%']],
+};
+
+const KERNELS = [FA1P, FA1T, FA2, FA3, FA4];
+
+/* ======================= drawing helpers ======================= */
+const dpr = window.devicePixelRatio || 1;
+function setup(cv, W, H){ cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + 'px'; cv.style.height = H + 'px'; const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, W, H); return g; }
+function text(g, s, x, y, col = C.ink, size = 11, weight = 400){ g.fillStyle = col; g.font = `${weight} ${size}px -apple-system,BlinkMacSystemFont,Inter,sans-serif`; g.fillText(s, x, y); }
+function wrap(g, s, x, y, maxW, lh, col, size = 11, weight = 400){
+  g.font = `${weight} ${size}px -apple-system,BlinkMacSystemFont,Inter,sans-serif`; g.fillStyle = col;
+  let line = '', yy = y + size;
+  for (const word of s.split(' ')){
+    const t = line ? line + ' ' + word : word;
+    if (g.measureText(t).width > maxW && line){ g.fillText(line, x, yy); line = word; yy += lh; } else line = t;
+  }
+  if (line) g.fillText(line, x, yy);
+  return yy;
+}
+function hatchRect(g, x, y, w, h){
+  g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip();
+  g.fillStyle = '#1b1e25'; g.fillRect(x, y, w, h); g.strokeStyle = '#3a3f4b'; g.lineWidth = 1;
+  for (let k = -h; k < w; k += 5){ g.beginPath(); g.moveTo(x + k, y + h); g.lineTo(x + k + h, y); g.stroke(); }
+  g.restore();
+}
+function rowLine(g, x, y, w){ g.strokeStyle = C.lane; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x - 3, y); g.lineTo(x + w + 3, y); g.stroke(); g.lineWidth = 1; }
+function arrow(g, x1, y1, x2, y2, col, label){
+  g.strokeStyle = col; g.fillStyle = col; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke();
+  const a = Math.atan2(y2 - y1, x2 - x1);
+  g.beginPath(); g.moveTo(x2, y2); g.lineTo(x2 - 8 * Math.cos(a - .4), y2 - 8 * Math.sin(a - .4)); g.lineTo(x2 - 8 * Math.cos(a + .4), y2 - 8 * Math.sin(a + .4)); g.closePath(); g.fill();
+  g.lineWidth = 1;
+  if (label){ const mx = (x1 + x2) / 2, my = (y1 + y2) / 2 - 4; g.font = '600 9.5px -apple-system,Inter,sans-serif'; const tw = g.measureText(label).width; g.fillStyle = '#171a21'; g.fillRect(mx - tw / 2 - 2, my - 9, tw + 4, 12); text(g, label, mx - tw / 2, my, col, 9.5, 600); }
+}
+
+/* ======================= state ======================= */
+const $ = id => document.getElementById(id);
+let ki = 3, timer = null, steps = [];
+const S = {step:0, sel:0, causal:false, row:0, osmPiece:2, osmScore:10.44};
+
+function isCausal(k){ return k.causal === 'on' || (k.causal === 'toggle' && S.causal); }
+function buildSteps(){
+  const k = KERNELS[ki], causal = isCausal(k), ord = k.order(S.sel, causal);
+  steps = [{ph:'init', i:k.rowsOf(S.sel), n:0, N:ord.length}];
+  ord.forEach((o, n) => { for (const ph of ['load','qk','softmax','pv']) steps.push({ph, i:o.i, j:o.j, n, N:ord.length}); });
+  steps.push({ph:'final', i:k.rowsOf(S.sel), n:ord.length, N:ord.length});
+}
+
+/* ======================= panels ======================= */
+function drawTiles(k, st){
+  const causal = isCausal(k), Tr = TOK / k.Br, Tc = ceil(TOK / k.Bc), span = Tc * k.Bc;
+  const MAP = 300, sc = MAP / span, X0 = 30, Y0 = 26, H = TOK * sc;
+  const g = setup($('cvS'), X0 + MAP + 14, Y0 + H + 30);
+  const mine = new Set(k.rowsOf(S.sel));
+  // which (i,j) pairs are done / current
+  const done = new Set(), cur = new Set();
+  for (let q = 1; q < S.step; q++){ const s = steps[q]; if (s.ph === 'pv') for (const i of s.i) done.add(i + ',' + s.j); }
+  if (st.j !== undefined) for (const i of st.i) cur.add(i + ',' + st.j);
+  for (let i = 0; i < Tr; i++) for (let j = 0; j < Tc; j++){
+    const t = tstat(k, i, j, causal), x = X0 + t.c0 * sc, y = Y0 + t.r0 * sc, w = k.Bc * sc, h = k.Br * sc;
+    if (t.skip){ hatchRect(g, x, y, w, h); }
+    else {
+      let col = mine.has(i) ? '#262e3b' : '#1c222c';
+      if (done.has(i + ',' + j)) col = C.done;
+      if (cur.has(i + ',' + j)) col = PH[st.ph].col;
+      g.fillStyle = col; g.fillRect(x, y, w, h);
+    }
+    g.strokeStyle = '#11141a'; g.strokeRect(x + .5, y + .5, w, h);
+  }
+  if (span > TOK){ hatchRect(g, X0 + TOK * sc, Y0, (span - TOK) * sc, H); text(g, 'pad', X0 + TOK * sc + 1, Y0 - 4, C.dim, 9); }
+  if (causal){
+    g.fillStyle = 'rgba(15,17,21,.55)'; g.beginPath(); g.moveTo(X0, Y0); g.lineTo(X0 + TOK * sc, Y0); g.lineTo(X0 + TOK * sc, Y0 + H); g.closePath(); g.fill();
+    g.strokeStyle = C.exp; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X0, Y0); g.lineTo(X0 + TOK * sc, Y0 + H); g.stroke(); g.setLineDash([]);
+  }
+  if (k.id === 'fa1p' && st.j !== undefined){ g.strokeStyle = C.copy; g.lineWidth = 2; g.strokeRect(X0 + st.j * k.Bc * sc + 1, Y0 + 1, k.Bc * sc - 2, H - 2); g.lineWidth = 1; }
+  for (const i of mine){ g.strokeStyle = C.lane; g.lineWidth = 2; g.strokeRect(X0 + 1, Y0 + i * k.Br * sc + 1, span * sc - 2, k.Br * sc - 2); g.lineWidth = 1; }
+  if (st.j !== undefined && k.id !== 'fa1p'){ g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(X0 + st.j * k.Bc * sc + .5, Y0 - 6, k.Bc * sc - 1, 4); g.lineWidth = 1; }
+  text(g, 'keys →', X0, 12, C.dim, 10.5); text(g, 'Q', 6, Y0 + 12, C.dim, 10.5);
+  const lbl = Math.max(1, Math.round(Tr / 8));
+  for (let i = 0; i < Tr; i += lbl) text(g, String(i), 6, Y0 + (i + .5) * k.Br * sc + 4, mine.has(i) ? C.lane : C.dim, 9.5);
+  text(g, `${Tr} query tiles × ${Tc} key tiles of ${k.Br} × ${k.Bc}${causal ? ' · causal' : ''}`, X0, Y0 + H + 18, C.dim, 10.5);
+}
+
+function drawBlock(k, st){
+  const W = 470, H = 350, g = setup($('cvB'), W, H), m = k.mem;
+  const colX = [6, 162, 318], bw = 146, rh = 30, top = 24;
+  m.cols.forEach((c, q) => text(g, c, colX[q], 12, C.dim, 10.5, 600));
+  const pos = {}, flows = m.flows(st), hot = new Set();
+  flows.forEach(f => { hot.add(f[0]); hot.add(f[1]); });
+  for (const b of m.boxes){
+    const x = colX[b.c], y = top + b.r * rh; pos[b.id] = {x, y, w:bw, h:rh - 6};
+    const on = hot.has(b.id);
+    g.fillStyle = on ? '#2f3a4f' : '#20252f'; g.fillRect(x, y, bw, rh - 6);
+    g.strokeStyle = on ? PH[st.ph].col : '#333a48'; g.lineWidth = on ? 1.5 : 1; g.strokeRect(x + .5, y + .5, bw - 1, rh - 7); g.lineWidth = 1;
+    text(g, b.t, x + 6, y + 15, on ? '#fff' : C.dim, 10.5, on ? 600 : 400);
+  }
+  for (const [a, b, lab] of flows){
+    const A = pos[a], B = pos[b]; if (!A || !B) continue;
+    const col = PH[st.ph].col;
+    if (a === b){ g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.arc(A.x + A.w - 4, A.y + A.h / 2, 9, -1.2, 1.2); g.stroke(); g.lineWidth = 1; if (lab) text(g, lab, A.x + A.w - 52, A.y + A.h / 2 + 4, col, 9.5, 600); continue; }
+    if (A.x === B.x){ const x = A.x + A.w - 40; arrow(g, x, A.y + (B.y > A.y ? A.h : 0), x, B.y + (B.y > A.y ? 0 : B.h), col, lab); continue; }
+    if (Math.abs(A.x - B.x) > bw + 20){ // skip a column: route below the boxes
+      const ax = A.x + A.w / 2, bx = B.x + B.w / 2, yl = 143;
+      g.strokeStyle = col; g.lineWidth = 2; g.beginPath(); g.moveTo(ax, A.y + A.h); g.lineTo(ax, yl); g.lineTo(bx, yl); g.stroke(); g.lineWidth = 1;
+      arrow(g, bx, yl, bx, B.y + B.h + 2, col, '');
+      if (lab){ g.font = '600 9.5px -apple-system,Inter,sans-serif'; const tw = g.measureText(lab).width, mx = (ax + bx) / 2; g.fillStyle = '#171a21'; g.fillRect(mx - tw / 2 - 2, yl - 6, tw + 4, 12); text(g, lab, mx - tw / 2, yl + 4, col, 9.5, 600); }
+      continue;
+    }
+    const fwd = A.x < B.x;
+    arrow(g, fwd ? A.x + A.w : A.x, A.y + A.h / 2, fwd ? B.x - 2 : B.x + B.w + 2, B.y + B.h / 2, col, lab);
+  }
+  g.strokeStyle = C.line; g.beginPath(); g.moveTo(0, 150.5); g.lineTo(W, 150.5); g.stroke();
+  k.own(g, 6, 158, W - 12, H - 162, st, Math.min(S.row, k.Br - 1));
+}
+
+function drawSMs(k){
+  const sm = k.sm, n = sm.gpu === 'b200' ? 148 : 132, cols = 24, cw = 34, ch = 16, rows = ceil(n / cols);
+  const W = cols * cw + 12, H = rows * ch + 26, g = setup($('cvG'), W, H);
+  for (let q = 0; q < n; q++){
+    const x = 6 + (q % cols) * cw, y = 6 + Math.floor(q / cols) * ch;
+    const busy = sm.blocks >= n ? sm.perSm : (q < sm.blocks ? 1 : 0);
+    if (!busy){ g.fillStyle = C.idle; g.fillRect(x, y, cw - 3, ch - 3); }
+    else for (let b = 0; b < busy; b++){ g.fillStyle = `hsl(${200 + b * 40} 45% ${q === 0 ? 50 : 34}%)`; g.fillRect(x + b * (cw - 3) / busy, y, (cw - 3) / busy - (busy > 1 ? 1 : 0), ch - 3); }
+    if (q === 0){ g.strokeStyle = C.lane; g.lineWidth = 2; g.strokeRect(x + 1, y + 1, cw - 5, ch - 5); g.lineWidth = 1; }
+  }
+  const idle = Math.max(0, n - sm.blocks);
+  text(g, `${n} SMs (${sm.gpu === 'b200' ? 'B200' : 'H100'}) · ${sm.blocks.toLocaleString()} blocks${sm.perSm > 1 ? `, ${sm.perSm} per SM at once` : ''}${idle ? ` · ${idle} SMs idle` : ''} · yellow = the selected block's SM`, 6, H - 6, C.dim, 10.5);
+}
+
+/* ---------- unit rails: the book's idealised cycle budget ---------- */
+const WINDOW = 6144;
+function railsModel(k, gpu){
+  const tcRate = gpu === 'b200' ? 8192 : 4096, TILE_TC = 8388608 / tcRate;
+  const useFA4 = k.rails === 'pp4' && gpu === 'b200';
+  const expRate = useFA4 ? EMU.find(e => e.v === $('emu').value).rate : 16;
+  const TILE_EXP = 16384 / expRate, REST = 0.10 * 1024, segs = [];
+  const add = (rail, t0, t1, col, lab, ph) => segs.push({rail, t0, t1, col, lab, ph});
+  let tiles = 0, perTile = 0, note = '';
+  if (k.rails === 'serial1p'){
+    const RT = Math.round(163840 / (3.35e12 / 132 / 1.83e9));
+    add('copy', 0, WINDOW + 400, C.copy, `O_i, m, ℓ round trip: 160 KiB per 128×64 step ≈ ${RT.toLocaleString()} cycles at HBM's per-SM share (computed), off the scale →`, 'load');
+    add('tc', 0, WINDOW, null, `idle: S = Q·Kᵀ and P·V wait for O_i to arrive; they start at ≈ ${RT.toLocaleString()} cycles, off the scale`, 'qk pv');
+    add('exp', 0, WINDOW, null, 'idle: the softmax waits for S', 'softmax');
+    add('fma', 0, WINDOW, null, 'idle: ÷ℓ at every step comes after P·V', 'pv');
+    perTile = 2 * RT; note = `The tensor cores and the exponential unit wait for each round trip. Per 128 × 64 step the arithmetic is only ${(TILE_TC / 2 + TILE_EXP / 2).toLocaleString()} cycles, against ≈ ${RT.toLocaleString()} cycles of HBM traffic. Peak bandwidth ÷ 132 SMs ÷ 1.83 GHz ≈ 13.9 B per SM per cycle; the L2 is ignored.`;
+  } else if (k.rails === 'serialT'){
+    const FMA_MM = 8388608 / 256;
+    add('fma', 0, WINDOW + 400, C.fma, `both products as IEEE fp32 on the FMA lanes: 8.39 M ops ÷ 256 per cycle = ${FMA_MM.toLocaleString()} cycles per 128×128 of work (inference) →`, 'qk');
+    add('copy', 0, 300, C.copy, 'tl.load K, V', 'load');
+    add('tc', 0, WINDOW, null, 'idle: fp32 tl.dot with allow_tf32=False does not use the tensor cores (inference)', 'qk pv');
+    add('exp', 0, WINDOW, null, 'tl.exp runs after S is complete: off the scale, past the FMA block', 'softmax');
+    perTile = FMA_MM + TILE_EXP; note = 'Inference from the code: fp32 inputs with allow_tf32=False keep tl.dot off the tensor cores, so the products cost 32× more cycles than on an H100\'s tensor cores. Even in bf16, the loop would divide O at every step (book T3: 0.826 ms vs T4 0.534 ms).';
+  } else if (k.rails === 'serial' || (k.rails !== 'pp3' && k.rails !== 'pp4')){
+    let t = 0;
+    while (t < WINDOW){
+      add('copy', t, t + 60, C.copy, 'issue', 'load');
+      add('copy', t + 60, t + 60 + 768, 'rgba(56,189,248,.35)', 'next K/V travel (cp.async)', 'load');
+      add('tc', t, t + TILE_TC / 2, C.tc, 'S = Q·Kᵀ', 'qk'); t += TILE_TC / 2;
+      add('fma', t, t + REST / 2, C.fma, '', 'softmax'); t += REST / 2;
+      add('exp', t, t + TILE_EXP, C.exp, 'exp2 (MUFU)', 'softmax'); add('tc', t, t + TILE_EXP, null, 'idle', 'softmax'); t += TILE_EXP;
+      add('fma', t, t + REST / 2, C.fma, '', 'softmax'); t += REST / 2;
+      add('tc', t, t + TILE_TC / 2, C.pv, 'O += P·V', 'pv'); t += TILE_TC / 2;
+      tiles++;
+    }
+    perTile = TILE_TC + TILE_EXP + REST;
+    note = `One warp runs multiply, softmax and multiply in series, so the tensor cores sit idle for ${Math.round(100 * TILE_EXP / perTile)}% of each tile. A second block on the SM can fill some gaps, but only by chance. Nothing in FA-2 arranges it.`;
+  } else {
+    // ping-pong between two groups (FA-3 consumers, or FA-4 softmax warpgroups)
+    const fa4 = useFA4, perGroupTC = fa4 ? TILE_TC : TILE_TC / 2, perGroupExp = fa4 ? TILE_EXP : TILE_EXP / 2;
+    const pre = REST / (fa4 ? 2 : 4), post = REST / (fa4 ? 2 : 4) + (fa4 ? 0 : 64);
+    const corr = fa4 && !$('thr').checked ? 128 : 0;
+    let tcFree = 0, mufuFree = 0; const ready = [0, 0], tcEnds = [];
+    for (let job = 0; job < 60; job++){
+      const gq = job % 2, nm = gq ? (fa4 ? 'tile 1' : 'B') : (fa4 ? 'tile 0' : 'A');
+      const t0 = Math.max(ready[gq], tcFree), t1 = t0 + perGroupTC; tcFree = t1; tcEnds.push(t1);
+      add('tc', t0, t1, gq ? '#c4b5fd' : C.tc, `${nm}: ${fa4 ? 'S / P·V' : 'S_j + P·V'}`, 'qk pv');
+      const e0 = Math.max(t1 + pre, mufuFree), e1 = e0 + perGroupExp; mufuFree = e1;
+      add('fma', t1, t1 + pre, C.fma, '', 'softmax');
+      add('exp', e0, e1, C.exp, `${nm} exp2`, 'softmax');
+      if (fa4 && $('emu').value !== '0') add('fma', e0, e1, 'rgba(244,114,182,.55)', `${nm}: ${$('emu').value}% 2ˣ by cubic`, 'softmax');
+      add('fma', e1, e1 + post, C.fma, fa4 ? '' : 'rescale', 'softmax');
+      let r = e1 + post;
+      if (corr){ add('corr', r, r + corr, C.corr, `${nm} rescale O`, 'pv'); r += corr; }
+      ready[gq] = r;
+    }
+    if (!fa4) add('copy', 0, WINDOW, 'rgba(56,189,248,.45)', 'producer warpgroup: TMA fills the ring a buffer ahead', 'load');
+    else add('copy', 0, WINDOW, 'rgba(56,189,248,.45)', 'load warp: TMA · shared-memory reads 768 cycles a tile (fits under 1,024)', 'load');
+    const a = tcEnds[20], b = tcEnds[40]; perTile = (b - a) / (fa4 ? 20 : 10);
+    if (fa4) note = `Per 128 × 128 tile: ${TILE_TC} cycles of products, ${Math.round(TILE_EXP)} of exponentials at ${expRate}/cycle, plus the rest of the softmax${corr ? ' and a rescale by the correction warpgroup (threshold off: some row in a warp gets a new max at almost every step with random inputs)' : ''}. The two softmax warpgroups take turns on the exponential unit. This is the idealised budget. Measured inside FA-4, a tile took about 1,595 cycles, and turning the threshold off cost 7–16%, more than this model shows.`;
+    else note = gpu === 'b200'
+      ? 'FA-3\'s schedule on a B200: products shrink to 1,024 cycles a tile, while the exponentials stay at 1,024. Neither hides, so the rest of the softmax opens gaps on the tensor-core rail. This is the problem FA-4 was written for (book §10.4).'
+      : 'Ping-pong: each consumer\'s exponentials (512 cycles) hide under the other consumer\'s products (1,024), so the tensor-core rail never stops. Real kernels are less clean (Nsight: tensor pipe 81.5% busy).';
+    tiles = tcEnds.filter(t => t <= WINDOW).length / (fa4 ? 1 : 2);
+  }
+  return {segs, perTile, note, TILE_TC, TILE_EXP, tiles};
+}
+
+function drawRails(k, st){
+  const gpu = $('gpu').value, m = railsModel(k, gpu);
+  const rails = [['copy','copy (cp.async / TMA)'],['tc','tensor cores'],['exp','exponentials (MUFU, 16/cycle)'],['fma','FMA lanes (128/cycle)']];
+  if (k.rails === 'pp4' && gpu === 'b200') rails.push(['corr','correction warpgroup']);
+  const LW = 190, RH = 30, W = 840, PW = W - LW - 12, sc = PW / WINDOW;
+  const H = rails.length * RH + 74, g = setup($('cvR'), W, H);
+  const all = st.ph === 'init' || st.ph === 'final', act = s => s.ph.split(' ').includes(st.ph);
+  rails.forEach(([id, nm], q) => {
+    const y = 8 + q * RH, live = !all && m.segs.some(s => s.rail === id && s.col && act(s));
+    text(g, (live ? '▶ ' : '') + nm, 4, y + 17, live ? '#fff' : C.dim, 11, live ? 700 : 400);
+    g.fillStyle = '#1b1f27'; g.fillRect(LW, y, PW, RH - 6);
+    for (const s of m.segs.filter(s => s.rail === id)){
+      const x0 = LW + Math.max(0, s.t0) * sc, x1 = LW + Math.min(WINDOW, s.t1) * sc; if (x1 <= LW || x0 >= LW + PW) continue;
+      const on = all || act(s), hi = !all && act(s);
+      if (!s.col){ g.strokeStyle = hi ? C.lane : '#4a5162'; g.setLineDash([3, 3]); g.strokeRect(x0 + .5, y + .5, x1 - x0 - 1, RH - 7); g.setLineDash([]); if (x1 - x0 > 30){ g.save(); g.beginPath(); g.rect(x0, y, x1 - x0, RH - 6); g.clip(); text(g, s.lab, x0 + 4, y + 16, hi ? C.lane : '#6b7385', 10, hi ? 600 : 400); g.restore(); } continue; }
+      g.fillStyle = s.col; g.globalAlpha = on ? 1 : .18; g.fillRect(x0, y, Math.max(1, x1 - x0 - 1), RH - 6); g.globalAlpha = 1;
+      if (hi && x1 - x0 > 3){ g.strokeStyle = '#fff'; g.lineWidth = 1.5; g.strokeRect(x0 + .75, y + .75, Math.max(1, x1 - x0 - 2.5), RH - 7.5); g.lineWidth = 1; }
+      if (s.lab && x1 - x0 > 46){ g.save(); g.beginPath(); g.rect(x0, y, x1 - x0, RH - 6); g.clip(); text(g, s.lab, x0 + 4, y + 16, '#0f1115', 10, 600); g.restore(); }
+    }
+  });
+  const ay = 8 + rails.length * RH;
+  for (let c = 0; c <= WINDOW; c += 1024){ const x = LW + c * sc; g.strokeStyle = '#333a48'; g.beginPath(); g.moveTo(x, 8); g.lineTo(x, ay); g.stroke(); text(g, c.toLocaleString(), x - 10, ay + 12, C.dim, 10); }
+  text(g, 'cycles of one SM →', LW + PW - 100, ay + 26, C.dim, 10);
+  text(g, all ? 'all phases shown' : `outlined: every block of the current phase (${PH[st.ph].name}) across the window`, LW, ay + 26, all ? C.dim : C.lane, 10, 600);
+  const pt = Math.round(m.perTile);
+  text(g, `≈ ${pt.toLocaleString()} cycles per 128×128 tile (steady state)`, 4, ay + 44, '#fff', 11, 600);
+  text(g, `products ${m.TILE_TC.toLocaleString()} · exponentials ${Math.round(m.TILE_EXP).toLocaleString()} · floor = the longer one`, 4, ay + 59, C.dim, 10.5);
+  $('capR').innerHTML = m.note;
+}
+
+/* ---------- online softmax panel: the book's row of "it" ---------- */
+function osmCompute(mode, scores, upto){
+  const p1 = scores.slice(0, 4), p2 = scores.slice(4), L2E = Math.LOG2E;
+  let m = -Infinity, l = 0, c = Array(8).fill(0), ops = [], divs = 0, rescales = 0, maxTerm = 0;
+  const pieces = [p1, p2].slice(0, upto);
+  pieces.forEach((p, pi) => {
+    const off = pi * 4, pm = Math.max(...p);
+    let mNew = Math.max(m, pm), a = m === -Infinity ? 0 : Math.exp(m - mNew), keep = false;
+    if (mode === 'fa4' && m !== -Infinity){
+      const jump2 = (mNew - m) * L2E;
+      if (jump2 <= 8){ keep = true; mNew = m; a = 1; ops.push(`piece ${pi + 1}: max jumps ${(pm - m).toFixed(2)} = ${jump2.toFixed(2)} in log₂ ≤ 8 → <b>keep m = ${m.toFixed(2)}</b>, no rescale`); }
+      else { rescales++; ops.push(`piece ${pi + 1}: max jumps ${(pm - m).toFixed(2)} = ${jump2.toFixed(2)} in log₂ > 8 → <b>rescale</b> by e^(${m.toFixed(2)} − ${mNew.toFixed(2)}) = ${a.toPrecision(3)}`); }
+    } else if (m !== -Infinity && mNew > m){ rescales++; ops.push(`piece ${pi + 1}: m ${m.toFixed(2)} → ${mNew.toFixed(2)}, scale old ℓ and o by e^(${(m - mNew).toFixed(2)}) = ${a.toPrecision(3)}`); }
+    const e = p.map(s => Math.exp(s - mNew)), es = e.reduce((x, y) => x + y, 0);
+    maxTerm = Math.max(maxTerm, ...e);
+    const lNew = l * a + es;
+    if (mode === 'fa1'){
+      for (let q = 0; q < off; q++) c[q] = c[q] * (l * a) / lNew;
+      e.forEach((v, q) => c[off + q] = v / lNew);
+      divs++; if (pi > 0) ops.push(`piece ${pi + 1}: <b>undo</b> the last ÷ℓ (× ${l.toFixed(3)}·a) and <b>divide again</b> by ℓ = ${lNew.toFixed(4)}`); else ops.push(`piece 1: m = ${mNew.toFixed(2)}, ℓ = ${lNew.toFixed(4)}, O divided by ℓ`);
+    } else {
+      for (let q = 0; q < off; q++) c[q] *= a;
+      e.forEach((v, q) => c[off + q] = v);
+      if (pi === 0) ops.push(`piece 1: m = ${mNew.toFixed(2)}, ℓ = ${lNew.toFixed(4)}, o kept <b>unnormalised</b>`);
+    }
+    m = mNew; l = lNew;
+  });
+  return {m, l, c, ops, divs, rescales, maxTerm};
+}
+function renderOSM(k){
+  const mode = (k.id === 'fa1p' || k.id === 'fa1t') ? 'fa1' : k.id === 'fa4' ? 'fa4' : 'fa2';
+  const sc = [4.87, 4.21, 4.16, 4.33, 6.60, S.osmScore, 5.39, 2.57], upto = Math.min(S.osmPiece, 2), fin = S.osmPiece === 3;
+  const r = osmCompute(mode, sc, upto), ref = osmCompute('fa2', sc, 2);
+  const w = fin ? (mode === 'fa1' ? r.c : r.c.map(v => v / r.l)) : r.c;
+  const maxw = Math.max(...w, 1e-9);
+  const modeName = {fa1:'FA-1: normalised after every piece', fa2:'FA-2 / FA-3: unnormalised, ÷ℓ once at the end', fa4:'FA-4: unnormalised, rescale only past 8 in log₂'}[mode];
+  let h = `<div class="row">${modeName}</div>`;
+  h += `<div class="row"><span>"GPU" score s₆</span><input type="range" id="osmS" min="4" max="12" step="0.01" value="${S.osmScore}" style="width:150px"><span class="val">${S.osmScore.toFixed(2)}</span></div>`;
+  h += `<div class="row">${['start','piece 1','piece 2','÷ ℓ'].map((t, q) => `<button data-p="${q}" class="${S.osmPiece === q ? 'on' : ''}">${t}</button>`).join('')}</div>`;
+  h += `<table><tr><th>token</th><th>score</th><th>${fin || mode === 'fa1' ? 'weight on v' : 'coeff. on v (×e^−m)'}</th><th></th></tr>`;
+  sc.forEach((s, q) => {
+    const inn = q < upto * 4;
+    h += `<tr${q === 4 ? ' style="border-top:2px solid #3a4152"' : ''}><td>v${q + 1}${q === 5 ? ' "GPU"' : ''}</td><td>${s.toFixed(2)}</td><td>${inn ? (fin || mode === 'fa1' ? w[q].toFixed(4) : r.c[q].toPrecision(4)) : '—'}</td><td style="width:80px">${inn ? `<span class="bar" style="width:${Math.max(1, 70 * w[q] / maxw)}px"></span>` : ''}</td></tr>`;
+  });
+  h += `</table>`;
+  h += `<div class="ops">m = <b>${isFinite(r.m) ? r.m.toFixed(2) : '−∞'}</b> · ℓ = <b>${r.l.toPrecision(5)}</b> · divisions of O so far: <b>${mode === 'fa1' ? r.divs : (fin ? 1 : 0)}</b> · rescales: <b>${r.rescales}</b>${mode === 'fa4' ? ` · largest term: <b>${r.maxTerm.toFixed(1)}</b> (≤ 256)` : ''}</div>`;
+  if (r.ops.length) h += `<div class="ops">${r.ops.join('<br>')}</div>`;
+  if (fin) h += `<div class="ops">Final weight on "GPU": <b>${(ref.c[5] / ref.l).toFixed(3)}</b>. Every version gives the same answer, because only the order of the operations changes.</div>`;
+  h += `<div class="ops">Scores are the book's row of "it" (Chapter 8, head 11, layer 6). At s₆ = 10.44 the jump is 5.57, which is 8.04 in log₂, so FA-4 rescales (only just). Try 10.40.</div>`;
+  $('osm').innerHTML = h;
+  $('osmS').oninput = e => { S.osmScore = +e.target.value; renderOSM(k); };
+  document.querySelectorAll('#osm button').forEach(b => b.onclick = () => { S.osmPiece = +b.dataset.p; renderOSM(k); });
+}
+
+/* ======================= render ======================= */
+function buildTabs(){
+  let h = '', last = '';
+  KERNELS.forEach((k, q) => { if (k.group !== last){ h += `<span class="tabsep">${k.group}</span>`; last = k.group; } h += `<span class="tab ${q === ki ? 'on' : ''}" data-k="${q}">${k.tab}</span>`; });
+  $('tabs').innerHTML = h;
+  document.querySelectorAll('.tab').forEach(el => el.onclick = () => { ki = +el.dataset.k; init(); });
+}
+function init(){
+  stop();
+  const k = KERNELS[ki];
+  buildTabs();
+  S.sel = Math.min(S.sel, k.selMax ? k.selMax() : 0);
+  $('selWrap').classList.toggle('hide', !k.sel);
+  if (k.sel){ $('selName').textContent = k.sel; $('sel').max = k.selMax(); $('sel').value = S.sel; }
+  $('causalWrap').classList.toggle('hide', k.causal !== 'toggle');
+  $('causal').checked = S.causal;
+  $('row').max = k.Br - 1; S.row = Math.min(S.row, k.Br - 1); $('row').value = S.row;
+  $('gpu').value = k.gpu;
+  $('emuWrap').classList.toggle('hide', k.id !== 'fa4');
+  $('thrWrap').classList.toggle('hide', k.id !== 'fa4');
+  $('meta').textContent = k.meta;
+  $('blurb').innerHTML = `<b>${k.name}.</b> ` + k.blurb;
+  $('capS').textContent = k.capS;
+  $('capB').textContent = 'Top: where each operand lives and what moves during this phase. Bottom: how the block\'s warps divide the work.';
+  $('capG').innerHTML = k.sm.text;
+  $('src').textContent = k.src;
+  rebuild();
+}
+function rebuild(){
+  buildSteps();
+  $('step').max = steps.length - 1;
+  S.step = Math.min(S.step, steps.length - 1);
+  render();
+}
+function render(){
+  const k = KERNELS[ki], st = steps[S.step], causal = isCausal(k);
+  $('step').value = S.step; $('stepv').textContent = `${S.step} / ${steps.length - 1}`;
+  if (k.sel) $('selv').textContent = S.sel;
+  $('rowv').textContent = S.row;
+  $('steplabel').textContent = st.ph === 'init' ? 'set-up: load Q, zero O, m = −∞, ℓ = 0' : st.ph === 'final' ? (k.id === 'fa1p' ? 'done: O is already in HBM' : 'epilogue: O ÷ ℓ, write O once') : `${k.stepLabel(st)} · ${PH[st.ph].name}`;
+  $('phases').innerHTML = PH_ORDER.map(p => `<span class="${p === st.ph ? 'on' : ''}" style="${p === st.ph ? `background:${PH[p].col};border-color:${PH[p].col}` : ''}">${PH[p].name}</span>`).join('');
+  drawTiles(k, st); drawBlock(k, st); drawRails(k, st); drawSMs(k);
+  $('code').innerHTML = k.code.map(l => `<span class="ln${l.note ? ' note' : ''}${l.tags.split(' ').includes(st.ph) ? ' hot' : ''}">${l.t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</span>`).join('');
+  const hotEl = $('code').querySelector('.hot'); if (hotEl){ const pre = $('code'); const top = hotEl.offsetTop - pre.offsetTop; if (top < pre.scrollTop || top > pre.scrollTop + pre.clientHeight - 40) pre.scrollTop = Math.max(0, top - 60); }
+  // running totals up to this step
+  const tot = {rd:0, wr:0, exp:0, mm:0, div:0, merge:0};
+  for (let q = 0; q <= S.step; q++){ const d = k.acct(steps[q], causal); for (const key in d) tot[key] += d[key]; }
+  const d = k.acct(st, causal);
+  const mmName = k.id === 'fa1t' ? 'matmul ops (FMA lanes, inferred)' : 'tensor-core ops';
+  let h = `<div><span>phase</span><span>${PH[st.ph].name}</span></div>`;
+  h += `<div><span>key tiles done</span><span>${Math.min(st.n, st.N)} / ${st.N}</span></div>`;
+  h += `<div><span>global reads, this step / so far</span><span>${KiB(d.rd || 0)} / ${KiB(tot.rd)} KiB</span></div>`;
+  h += `<div><span>global writes, this step / so far</span><span class="${k.id === 'fa1p' && tot.wr ? 'bad' : ''}">${KiB(d.wr || 0)} / ${KiB(tot.wr)} KiB</span></div>`;
+  h += `<div><span>exponentials so far</span><span>${fmt(tot.exp)}</span></div>`;
+  h += `<div><span>${mmName} so far</span><span>${fmt(tot.mm)}</span></div>`;
+  h += `<div><span>O elements divided by ℓ so far</span><span class="${(k.id === 'fa1p' || k.id === 'fa1t') && tot.div > k.Br * D ? 'bad' : 'good'}">${fmt(tot.div)}</span></div>`;
+  if (k.id === 'fa1p') h += `<div><span>split-K merges (smem + barrier)</span><span class="bad">${tot.merge}</span></div>`;
+  h += `<span class="note">Measured in the book (4,096 tokens, 32 heads):</span>`;
+  for (const [a, b] of k.measured) h += `<div><span>${a}</span><span>${b}</span></div>`;
+  $('metrics').innerHTML = h;
+  $('insp').innerHTML = k.rowOwner(Math.min(S.row, k.Br - 1));
+  renderOSM(k);
+}
+function stop(){ if (timer){ clearInterval(timer); timer = null; } $('play').textContent = '▶ play'; }
+function advance(){ if (S.step < steps.length - 1){ S.step++; render(); } else stop(); }
+$('prev').onclick = () => { stop(); if (S.step > 0){ S.step--; render(); } };
+$('next').onclick = () => { stop(); advance(); };
+$('play').onclick = () => { if (timer){ stop(); return; } if (S.step >= steps.length - 1) S.step = 0; $('play').textContent = '❚❚ pause'; timer = setInterval(advance, 960 - +$('speed').value); };
+$('speed').oninput = () => { if (timer){ clearInterval(timer); timer = setInterval(advance, 960 - +$('speed').value); } };
+$('step').oninput = e => { stop(); S.step = +e.target.value; render(); };
+$('sel').oninput = e => { stop(); S.sel = +e.target.value; S.step = 0; rebuild(); };
+$('causal').onchange = e => { stop(); S.causal = e.target.checked; S.step = 0; rebuild(); };
+$('row').oninput = e => { S.row = +e.target.value; render(); };
+$('gpu').onchange = () => render();
+$('emu').innerHTML = EMU.map(e => `<option value="${e.v}"${e.v === '18.75' ? ' selected' : ''}>${e.t}</option>`).join('');
+$('emu').onchange = () => render();
+$('thr').onchange = () => render();
+window.addEventListener('resize', () => render());
+init();
+</script>
+</body>
+</html>

@@ -5,8 +5,9 @@
   "qwen3-8b/index.html": "HTTP 200; bytes match",
   "qwen3-8b/diagram.mmd": "HTTP 200; bytes match",
   "gemm/index.html": "HTTP 200; bytes match",
+  "flash-attention/index.html": "HTTP 200; bytes match",
   "qwen3-block/index.html": "HTTP 200; bytes match",
   "assets/mermaid.min.js": "HTTP 200; bytes match",
   "assets/MERMAID-LICENSE": "HTTP 200; bytes match",
-  "brief": "Unchanged SHA256 037090b6555a09ef6cec94c4e01d957e735343ed541bd411802ad0ac6510ed6d"
+  "brief": "Unchanged SHA256 2d6b94e383d4d89e8106e07fd22c499ee4384e71b3aaff4b85f8d84390963df7"
 }
