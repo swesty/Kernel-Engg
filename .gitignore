@@ -9,3 +9,7 @@ lecture3/data/
 # Assignment 1 work stays private until submission.
 # Upstream starter files (README, a1.py, PDF, ...) remain tracked.
 assignment1/
+
+# Local scratch and build output at the repo root
+/output/
+/tmp/
