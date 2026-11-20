@@ -2,7 +2,7 @@
   "assignment1/qwen3_block_visualizer.html": "c99ccafd56039ee80b2692571ddbdd49fcbb09b9704b0989773d8ed3660eee2f",
   "visualizations/kernels/GEMM kernels visualizer.html": "18353a819999586f68ddfefa7481ccce9da6da10e10d938d3edde8bc50ed9247",
   "visualizations/smem-bank-contention/visualizer.html": "15f88a145c4dff38deb62a26b01339ccff801b5a22fb5d55ce54424e285c6849",
-  "visualizations/flash-attention/visualizer.html": "8882a043a95ca28094c0baea1988e3ab6099cccefef025ca88a1ea585f49d64a",
+  "visualizations/flash-attention/visualizer.html": "753b7976ed37573e65812f492f5f278408f56f2a86e7ef3b871f75ca113b8d33",
   "consumer-gpu-kernel-guide:guides/sm12x-attention/visualizer.html": "4276cd16463dc0e2714a659e8683e69b0ba90782e9c649f2863f9c1f35c9a29a",
   "consumer-gpu-kernel-guide:guides/tensorfold-vs-vllm/report.html": "95a63277f7db74cdc1b9f261d9510b7382e6e5ffb8e1054817e03fda436e686f",
   "consumer-gpu-kernel-guide:guides/sm12x-attention/REPORT.md": "aa07213d2a1d419d096d8a4811414fafd4ce2fb1eb9454aabf2ad57436ee1428",
