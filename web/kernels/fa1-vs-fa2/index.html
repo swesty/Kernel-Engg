@@ -1,0 +1,463 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlashAttention 1 vs 2</title>
+<style>
+  /* Standalone theme, matching visualizer.html and the pages.swesty.net kernel hub (dark only). */
+  :root {
+    color-scheme: dark;
+    --background: #0f1115; --foreground: #e6e8ee; --card: #171a21; --secondary: #1f2430;
+    --border: #2a2f3a; --muted: #3a4150; --muted-foreground: #8a91a3;
+    --primary: #38bdf8; --primary-foreground: #0f1115; --code-background: #12151b;
+    --success: #34c38f; --info: #3b9eff; --destructive: #ef5a5f;
+    --chart-1: #4f7cff; --chart-2: #e8a33d; --chart-3: #2fae7a; --chart-4: #a26bf0; --chart-5: #e0567a;
+    --radius: 8px; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  body { margin: 0; background: var(--background); color: var(--foreground);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  a { color: var(--primary); }
+  h1 { font-size: 22px; letter-spacing: -0.01em; margin: 18px 0 4px; }
+  :root {
+    --q: var(--chart-1, #4f7cff);
+    --k: var(--chart-2, #e8a33d);
+    --v: var(--chart-3, #2fae7a);
+    --o: var(--chart-4, #a26bf0);
+    --s: var(--chart-5, #e0567a);
+    --rd: var(--info, #3b9eff);
+    --wr: var(--destructive, #e5484d);
+    --line: var(--border, #8884);
+    --dim: var(--muted-foreground, #888);
+  }
+  * { box-sizing: border-box; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 4px 20px 48px; }
+  @media (max-width: 600px) { .wrap { padding: 4px 16px 40px; } }
+  h2 { font-size: 15px; margin: 22px 0 4px; }
+  p.lead { margin: 0 0 10px; color: var(--dim); font-size: 13px; line-height: 1.45; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; font-size: 13px; }
+  button, select {
+    font: inherit; font-size: 13px; padding: 5px 11px; border-radius: var(--radius, 8px);
+    border: 1px solid var(--line); background: var(--secondary, transparent); color: var(--foreground); cursor: pointer;
+  }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: transparent; }
+  label { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+  .panel { border: 1px solid var(--line); border-radius: var(--radius, 8px); padding: 12px; background: var(--card); min-width: 0; }
+  .panel h3 { margin: 0 0 2px; font-size: 14px; }
+  .panel .sub { font-size: 12px; color: var(--dim); margin-bottom: 6px; }
+  svg { width: 100%; height: auto; display: block; }
+  svg text { font-family: var(--font-mono, ui-monospace, monospace); }
+  pre.code {
+    font-family: var(--font-mono, ui-monospace, monospace); font-size: 10.5px; line-height: 1.45;
+    background: var(--code-background, #8881); border-radius: 6px; padding: 8px; margin: 8px 0 6px;
+    white-space: pre; overflow-x: auto;
+  }
+  pre.code span { display: block; padding: 0 4px; border-radius: 3px; opacity: .55; }
+  pre.code span.on { background: color-mix(in srgb, var(--primary, #4f7cff) 16%, transparent); opacity: 1; }
+  .events { font-size: 12px; line-height: 1.5; min-height: 5.6em; margin: 4px 0 6px; }
+  .events div { display: block; margin-bottom: 2px; }
+  .events b.r { color: var(--rd); } .events b.w { color: var(--wr); } .events b.c { color: var(--s); }
+  table.ct { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+  table.ct td, table.ct th { padding: 3px 4px; border-top: 1px solid var(--line); text-align: right; }
+  table.ct th:first-child, table.ct td:first-child { text-align: left; color: var(--dim); font-weight: 400; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--dim); margin: 6px 0 0; }
+  .legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; vertical-align: -1px; margin-right: 4px; }
+  table.sum { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.sum th, table.sum td { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  table.sum th { font-weight: 600; }
+  table.sum td:first-child { color: var(--dim); width: 28%; }
+  .note { font-size: 12px; color: var(--dim); margin-top: 6px; line-height: 1.45; }
+  code { font-family: var(--font-mono, ui-monospace, monospace); font-size: 0.92em; }
+</style>
+</head>
+<body><nav aria-label="Kernel tools" style="padding:10px 20px;border-bottom:1px solid #2a2f3a;font:13px system-ui"><a href="/kernels/" style="color:#7dd3fc;text-decoration:none">← Kernel tools</a></nav>
+<div class="wrap">
+
+<h1>FlashAttention-1 vs FlashAttention-2</h1>
+<p class="lead">The same tiled math on Q, K and V with the loops swapped. FA-1 keeps a K/V tile on chip and sweeps the Q tiles past it. FA-2 keeps a Q tile and its output on chip and streams K/V past it. The <a href="../flash-attention/">full FA-1–4 visualizer</a> goes deeper into each version.</p>
+
+<h2>1 · Which matrix sits in the outer loop</h2>
+<p class="lead">Both versions tile S = QKᵀ and never write S to HBM. The center grid is S, one cell per (query tile i, key tile j). Q tiles run down the left, Kᵀ tiles across the top, V tiles across the bottom (V<sub>j</sub> pairs with key tile j), and output tiles O<sub>i</sub> down the right. The bar inside each O tile shows how many K/V tiles have been folded into it so far. FA-1 sweeps <b>down each column</b> (K/V outer), and FA-2 sweeps <b>along each row</b> (Q outer).</p>
+
+<div class="controls">
+  <button id="play" class="primary">▶ Play</button>
+  <button id="step">Step</button>
+  <button id="reset">Reset</button>
+  <label>tiles <select id="T"><option>3</option><option selected>4</option><option>6</option></select></label>
+  <label>speed <input id="speed" type="range" min="150" max="1500" value="750" style="width:90px;direction:rtl"></label>
+  <label><input type="checkbox" id="conc"> run FA-2's query-tile blocks concurrently</label>
+</div>
+
+<div class="panels">
+  <div class="panel">
+    <h3>FlashAttention-1</h3>
+    <div class="sub">outer loop: K<sub>j</sub>, V<sub>j</sub> · inner loop: Q<sub>i</sub> · one thread block per (batch, head)</div>
+    <svg id="svg1"></svg>
+    <div class="events" id="ev1"></div>
+    <pre class="code" id="code1"></pre>
+    <table class="ct" id="ct1"></table>
+  </div>
+  <div class="panel">
+    <h3>FlashAttention-2</h3>
+    <div class="sub">outer loop: Q<sub>i</sub> (one thread block each) · inner loop: K<sub>j</sub>, V<sub>j</sub></div>
+    <svg id="svg2"></svg>
+    <div class="events" id="ev2"></div>
+    <pre class="code" id="code2"></pre>
+    <table class="ct" id="ct2"></table>
+  </div>
+</div>
+<div class="legend">
+  <span><i style="background:var(--q)"></i>Q tile on chip</span>
+  <span><i style="background:var(--k)"></i>K tile on chip</span>
+  <span><i style="background:var(--v)"></i>V tile on chip</span>
+  <span><i style="background:var(--o)"></i>O accumulator</span>
+  <span><i style="background:var(--s)"></i>S tile being computed</span>
+  <span><i style="border:2px solid var(--rd)"></i>read from HBM this step</span>
+  <span><i style="border:2px solid var(--wr)"></i>written to HBM this step</span>
+</div>
+<p class="note">Counts are in tiles (one tile = B × d elements). The scalar statistics m and ℓ (and FA-2's L) are a few floats per row and are left out. FA-2 reads K and V more often than FA-1, but those reads are spread across different thread blocks that all stream the same K/V, so many are served from L2. FA-2's win is not fewer total bytes. It comes from keeping O in registers, from parallelism, and from doing less non-matmul work.</p>
+
+<h2>2 · Who does the work: thread blocks on SMs</h2>
+<p class="lead">FA-1 launches one block per (batch, head), and that block walks every tile of the head by itself. FA-2 launches one block per (batch, head, query tile). Toy GPU below: 16 SMs, 8 query tiles × 8 key tiles per head. Change the head count to see when the gap disappears.</p>
+<div class="controls">
+  <button id="play2" class="primary">▶ Play</button>
+  <button id="reset2">Reset</button>
+  <label>batch × heads <select id="H"><option>1</option><option selected>4</option><option>16</option></select></label>
+  <span id="clock" style="font-variant-numeric:tabular-nums;color:var(--dim)"></span>
+</div>
+<div class="panel"><svg id="svgsm"></svg></div>
+<p class="note">Real scale, as in the <a href="../flash-attention/">full FA-1–4 visualizer</a>: an H100 has 132 SMs. With batch 1, 32 heads, N = 4096 and 128-row tiles, FA-1 launches 32 blocks (32 of 132 SMs busy) and FA-2 launches 32 × 32 = 1,024 blocks.</p>
+
+<h2>3 · Inside one block: how the 4 warps split the S tile</h2>
+<p class="lead">The two versions also cut a single S<sub>ij</sub> tile in different directions across warps.</p>
+<div class="panels">
+  <div class="panel"><h3>FA-1: split-K</h3><div class="sub">each warp takes a quarter of the keys in K<sub>j</sub> and V<sub>j</sub></div><svg id="w1"></svg>
+    <p class="note">Each query row is spread across all 4 warps, so each warp holds only a <i>partial</i> max, sum and P·V for that row. At every key tile the warps write their partials to shared memory, wait at <code>__syncthreads()</code>, and read them back to merge.</p></div>
+  <div class="panel"><h3>FA-2: split-Q</h3><div class="sub">each warp takes a quarter of the query rows in Q<sub>i</sub></div><svg id="w2"></svg>
+    <p class="note">Each warp owns whole rows. It sees every key for its rows, so its softmax statistics and its rows of O are already complete. K<sub>j</sub> and V<sub>j</sub> are shared read-only in shared memory, and the warps never exchange partial results.</p></div>
+</div>
+
+<h2>Summary</h2>
+<div class="panel" style="padding:4px 8px">
+<table class="sum">
+  <tr><th></th><th>FlashAttention-1</th><th>FlashAttention-2</th></tr>
+  <tr><td>Outer loop</td><td>K/V tiles (j)</td><td>Q tiles (i)</td></tr>
+  <tr><td>Held on chip through the inner loop</td><td>K<sub>j</sub>, V<sub>j</sub></td><td>Q<sub>i</sub>, plus O<sub>i</sub>, m<sub>i</sub>, ℓ<sub>i</sub> in registers</td></tr>
+  <tr><td>O traffic</td><td>read and written at every (i, j) step</td><td>written once per query tile</td></tr>
+  <tr><td>Q traffic</td><td>read again at every step</td><td>read once</td></tr>
+  <tr><td>K/V traffic</td><td>read once</td><td>read once per query tile (by different blocks, often from L2)</td></tr>
+  <tr><td>Softmax normalization</td><td>divide by ℓ at every step, then undo it at the next step</td><td>keep O unnormalized and divide once at the end; save only L = m + log ℓ for the backward pass</td></tr>
+  <tr><td>Grid</td><td>batch × heads</td><td>batch × heads × query tiles</td></tr>
+  <tr><td>Warp split inside a block</td><td>split-K: partials merged through shared memory</td><td>split-Q: no merging between warps</td></tr>
+</table>
+</div>
+</div>
+
+<script>
+const SUB = '₀₁₂₃₄₅₆₇₈₉';
+const sb = n => String(n).split('').map(c => SUB[+c]).join('');
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag, attrs, parent, txt) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (txt != null) e.textContent = txt;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ---------------- section 1: loop order ---------------- */
+const CODE1 = [
+  'for j in range(Tc):        # outer: K/V',
+  '  load K_j, V_j -> SRAM',
+  '  for i in range(Tr):      # inner: Q',
+  '    load Q_i, O_i, l_i, m_i <- HBM',
+  '    S = Q_i @ K_j.T        # on chip',
+  '    m, l = merge(m_i, l_i, S)',
+  '    O_i = (rescale(O_i) + P @ V_j) / l',
+  '    write O_i, l_i, m_i -> HBM',
+];
+const CODE2 = [
+  'for i in range(Tr):        # 1 block each',
+  '  load Q_i; O=0, l=0, m=-inf (regs)',
+  '  for j in range(Tc):      # inner: K/V',
+  '    load K_j, V_j -> SRAM',
+  '    S = Q_i @ K_j.T        # on chip',
+  '    m_new = max(m, rowmax(S)); l = ...',
+  '    O = O*exp(m-m_new) + P @ V_j  # no /l',
+  '  write O/l, L=m+log(l) -> HBM  # once',
+];
+
+let T = 4, t = 6, timer = null;
+const conc = () => document.getElementById('conc').checked;
+const total1 = () => T * T;
+const total2 = () => conc() ? T : T * T;
+
+// Return the list of (i, j) pairs processed at step k, for each algorithm.
+function step1(k) { return [{ i: k % T, j: Math.floor(k / T) }]; }
+function step2(k) {
+  if (conc()) return Array.from({ length: T }, (_, i) => ({ i, j: k }));
+  return [{ i: Math.floor(k / T), j: k % T }];
+}
+
+// Replay all steps up to and including k, returning cumulative counts and per-tile state.
+function replay(alg, k) {
+  const c = { Q: 0, K: 0, V: 0, Or: 0, Ow: 0, div: 0 };
+  const done = new Set(), progress = new Array(T).fill(0), final = new Array(T).fill(false);
+  const tot = alg === 1 ? total1() : total2();
+  for (let s = 0; s <= Math.min(k, tot - 1); s++) {
+    for (const { i, j } of (alg === 1 ? step1(s) : step2(s))) {
+      if (alg === 1) {
+        if (i === 0) { c.K++; c.V++; }
+        c.Q++; c.Or++; c.Ow++; c.div++;
+      } else {
+        if (j === 0) c.Q++;
+        c.K++; c.V++;
+        if (j === T - 1) { c.Ow++; c.div++; final[i] = true; }
+      }
+      if (s < k) done.add(i + ',' + j);
+      progress[i]++;
+    }
+  }
+  return { c, done, progress, final };
+}
+
+function drawPanel(alg) {
+  const svg = document.getElementById('svg' + alg);
+  svg.innerHTML = '';
+  const c = 40, side = 32, gap = 10, top = 6;
+  const qx = 4, sx = qx + side + gap, ky = top, sy = ky + side + gap;
+  const ox = sx + T * c + gap, vy = sy + T * c + gap;
+  const W = ox + side + 4, H = vy + side + 4;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const tot = alg === 1 ? total1() : total2();
+  const k = t - 1;                       // current step index (-1 = not started)
+  const finished = t > tot;
+  const cur = (k >= 0 && k < tot) ? (alg === 1 ? step1(k) : step2(k)) : [];
+  const R = replay(alg, finished ? tot : k);
+
+  const curI = new Set(cur.map(p => p.i)), curJ = new Set(cur.map(p => p.j));
+  // Which tiles live on chip right now.
+  const onQ = new Set(), onO = new Set(), onK = new Set();
+  const readQ = new Set(), readO = new Set(), readK = new Set(), writeO = new Set();
+  for (const { i, j } of cur) {
+    onQ.add(i); onO.add(i); onK.add(j);
+    if (alg === 1) { readQ.add(i); readO.add(i); writeO.add(i); if (i === 0) readK.add(j); }
+    else { if (j === 0) readQ.add(i); readK.add(j); if (j === T - 1) writeO.add(i); }
+  }
+
+  function tile(x, y, w, h, color, on, label, read, write) {
+    el('rect', { x, y, width: w, height: h, rx: 4,
+      fill: on ? color : 'transparent', 'fill-opacity': on ? 0.9 : 1,
+      stroke: write ? 'var(--wr)' : read ? 'var(--rd)' : on ? color : 'var(--line)',
+      'stroke-width': (read || write) ? 3 : 1.2 }, svg);
+    el('text', { x: x + w / 2, y: y + h / 2 + 4, 'text-anchor': 'middle', 'font-size': 10.5,
+      fill: on ? '#fff' : 'var(--dim)', 'font-weight': on ? 700 : 400 }, svg, label);
+  }
+
+  for (let j = 0; j < T; j++) {
+    tile(sx + j * c + 3, ky, c - 6, side, 'var(--k)', onK.has(j), 'K' + sb(j) + 'ᵀ', readK.has(j));
+    tile(sx + j * c + 3, vy, c - 6, side, 'var(--v)', onK.has(j), 'V' + sb(j), readK.has(j));
+  }
+  for (let i = 0; i < T; i++) {
+    tile(qx, sy + i * c + 3, side, c - 6, 'var(--q)', onQ.has(i), 'Q' + sb(i), readQ.has(i));
+    // O tile: outline + progress bar
+    const y = sy + i * c + 3, h = c - 6;
+    const frac = R.progress[i] / T;
+    el('rect', { x: ox, y: y + h * (1 - frac), width: side, height: h * frac, rx: 3,
+      fill: 'var(--o)', 'fill-opacity': onO.has(i) ? 0.9 : (R.final[i] || alg === 1 ? 0.35 : 0.2) }, svg);
+    el('rect', { x: ox, y, width: side, height: h, rx: 4, fill: 'none',
+      stroke: writeO.has(i) ? 'var(--wr)' : readO.has(i) ? 'var(--rd)' : onO.has(i) ? 'var(--o)' : 'var(--line)',
+      'stroke-width': (writeO.has(i) || readO.has(i)) ? 3 : 1.2 }, svg);
+    el('text', { x: ox + side / 2, y: y + h / 2 + 4, 'text-anchor': 'middle', 'font-size': 10.5,
+      fill: onO.has(i) ? '#fff' : 'var(--foreground)', 'font-weight': onO.has(i) ? 700 : 400 }, svg, 'O' + sb(i));
+    if (R.final[i]) el('text', { x: ox + side - 3, y: y + 10, 'text-anchor': 'end', 'font-size': 9, fill: 'var(--foreground)' }, svg, '✓');
+  }
+  // S grid
+  const curSet = new Set(cur.map(p => p.i + ',' + p.j));
+  for (let i = 0; i < T; i++) for (let j = 0; j < T; j++) {
+    const key = i + ',' + j, x = sx + j * c + 2, y = sy + i * c + 2, w = c - 4;
+    const isCur = curSet.has(key), isDone = R.done.has(key) || (finished);
+    el('rect', { x, y, width: w, height: w, rx: 4,
+      fill: isCur ? 'var(--s)' : isDone ? 'var(--muted, #8882)' : 'transparent',
+      'fill-opacity': isCur ? 0.9 : isDone ? 0.55 : 1,
+      stroke: isCur ? 'var(--s)' : 'var(--line)', 'stroke-dasharray': (isCur || isDone) ? '' : '3 3', 'stroke-width': 1.2 }, svg);
+    el('text', { x: x + w / 2, y: y + w / 2 + 4, 'text-anchor': 'middle', 'font-size': 9.5,
+      fill: isCur ? '#fff' : 'var(--dim)', 'font-weight': isCur ? 700 : 400, opacity: isCur ? 1 : 0.7 }, svg,
+      isDone && !isCur ? '·' : 'S' + sb(i) + sb(j));
+  }
+  // concurrency hint: color rows by block in FA-2 concurrent mode
+  if (alg === 2 && conc() && cur.length > 1) {
+    el('text', { x: sx + T * c / 2, y: sy - 2 - side - gap + 2, 'text-anchor': 'middle', 'font-size': 0 }, svg, '');
+  }
+
+  // events
+  const ev = document.getElementById('ev' + alg);
+  let html = '';
+  if (k < 0) html = `<div>Press <b>&nbsp;Play&nbsp;</b> or <b>&nbsp;Step</b>.</div>`;
+  else if (finished) {
+    html = `<div><b>Done</b> after ${tot} step${tot > 1 ? 's' : ''}${alg === 2 && conc() ? ` (${T} blocks ran side by side)` : ''}.</div>`;
+  } else if (alg === 1) {
+    const { i, j } = cur[0];
+    if (i === 0) html += `<div><b class="r">⬇ read</b> K${sb(j)}, V${sb(j)} into SRAM. They stay for this whole column.</div>`;
+    html += `<div><b class="r">⬇ read</b> Q${sb(i)} and the partial O${sb(i)}, m${sb(i)}, ℓ${sb(i)} from HBM.</div>`;
+    html += `<div><b class="c">⚙ compute</b> S${sb(i)}${sb(j)} = Q${sb(i)}K${sb(j)}ᵀ, fold P·V${sb(j)} into O${sb(i)}, divide by ℓ.</div>`;
+    html += `<div><b class="w">⬆ write</b> O${sb(i)}, m${sb(i)}, ℓ${sb(i)} back to HBM (the next column needs them).</div>`;
+  } else {
+    const multi = cur.length > 1, j = cur[0].j, i = cur[0].i;
+    const iTxt = multi ? 'every Q<sub>i</sub>' : 'Q' + sb(i), oTxt = multi ? 'each O<sub>i</sub>' : 'O' + sb(i);
+    if (j === 0) html += `<div><b class="r">⬇ read</b> ${iTxt} into SRAM once. ${oTxt}, m, ℓ start in registers.</div>`;
+    html += `<div><b class="r">⬇ read</b> K${sb(j)}, V${sb(j)}${multi ? ` (every block reads them)` : ''}.</div>`;
+    html += `<div><b class="c">⚙ compute</b> S${multi ? '<sub>i</sub>' + sb(j) : sb(i) + sb(j)}, rescale ${oTxt} by e<sup>m_old−m_new</sup>, add P·V${sb(j)}. No divide.</div>`;
+    if (j === T - 1) html += `<div><b class="w">⬆ write</b> ${oTxt} / ℓ and L = m + log ℓ to HBM, once.</div>`;
+    else html += `<div style="color:var(--dim)">${oTxt} stays in registers. Nothing is written.</div>`;
+  }
+  ev.innerHTML = html;
+
+  // code highlight
+  const code = alg === 1 ? CODE1 : CODE2;
+  const on = new Set();
+  if (k >= 0 && !finished) {
+    if (alg === 1) { on.add(0); if (cur[0].i === 0) on.add(1); [2, 3, 4, 5, 6, 7].forEach(x => on.add(x)); }
+    else { on.add(0); if (cur[0].j === 0) on.add(1); [2, 3, 4, 5, 6].forEach(x => on.add(x)); if (cur[0].j === T - 1) on.add(7); }
+  }
+  document.getElementById('code' + alg).innerHTML =
+    code.map((l, n) => `<span class="${on.has(n) ? 'on' : ''}">${l.replace(/</g, '&lt;')}</span>`).join('');
+
+  // counters
+  const C = R.c, show = k >= 0;
+  const v = x => show ? x : 0;
+  const reads = v(C.Q + C.K + C.V + C.Or), writes = v(C.Ow);
+  document.getElementById('ct' + alg).innerHTML = `
+    <tr><th>HBM tile reads</th><th>Q ${v(C.Q)}</th><th>K ${v(C.K)}</th><th>V ${v(C.V)}</th><th>O ${v(C.Or)}</th></tr>
+    <tr><th>HBM tile writes</th><td></td><td></td><td></td><td>O ${writes}</td></tr>
+    <tr><th>total tiles moved</th><td colspan="4"><b>${reads + writes}</b></td></tr>
+    <tr><th>divides by ℓ (per row)</th><td colspan="4">${v(C.div)}</td></tr>`;
+}
+
+function maxT() { return Math.max(total1(), total2()) + 1; }
+function render() { drawPanel(1); drawPanel(2); }
+function stop() { clearInterval(timer); timer = null; document.getElementById('play').textContent = '▶ Play'; }
+function advance() { if (t >= maxT()) { stop(); return; } t++; render(); if (t >= maxT()) stop(); }
+document.getElementById('play').onclick = () => {
+  if (timer) { stop(); return; }
+  if (t >= maxT()) t = 0;
+  document.getElementById('play').textContent = '❚❚ Pause';
+  advance();
+  timer = setInterval(advance, +document.getElementById('speed').value);
+};
+document.getElementById('step').onclick = () => { stop(); advance(); };
+document.getElementById('reset').onclick = () => { stop(); t = 0; render(); };
+document.getElementById('T').onchange = e => { stop(); T = +e.target.value; t = 0; render(); };
+document.getElementById('conc').onchange = () => { stop(); t = 0; render(); };
+document.getElementById('speed').oninput = () => { if (timer) { clearInterval(timer); timer = setInterval(advance, +document.getElementById('speed').value); } };
+
+/* ---------------- section 2: SMs ---------------- */
+const NSM = 16, TQ = 8;
+let H = 4, t2 = 12, timer2 = null;
+const fa1Time = () => Math.ceil(H / NSM) * TQ * TQ;
+const fa2Time = () => Math.ceil(H * TQ / NSM) * TQ;
+function drawSM() {
+  const svg = document.getElementById('svgsm'); svg.innerHTML = '';
+  const cols = 8, cw = 82, ch = 40, g = 6, lw = 0;
+  const gpuH = 2 * ch + g + 22;
+  const W = cols * (cw + g), Hh = 2 * gpuH + 14;
+  svg.setAttribute('viewBox', `0 0 ${W} ${Hh}`);
+  const T1 = fa1Time(), T2 = fa2Time(), Tend = Math.max(T1, T2);
+  [[1, 0], [2, gpuH + 14]].forEach(([alg, oy]) => {
+    const tEnd = alg === 1 ? T1 : T2;
+    const busyCount = [];
+    const label = alg === 1
+      ? `FA-1 · ${H} block${H > 1 ? 's' : ''} of ${TQ * TQ} tile-steps`
+      : `FA-2 · ${H * TQ} blocks of ${TQ} tile-steps`;
+    const status = t2 >= tEnd ? `finished at t = ${tEnd}` : `t = ${t2} / ${tEnd}`;
+    el('text', { x: 0, y: oy + 13, 'font-size': 12, 'font-weight': 700, fill: 'var(--foreground)' }, svg, label);
+    el('text', { x: W - g, y: oy + 13, 'font-size': 12, 'text-anchor': 'end', fill: t2 >= tEnd ? 'var(--success, #2fae7a)' : 'var(--dim)' }, svg, status);
+    for (let s = 0; s < NSM; s++) {
+      const x = (s % cols) * (cw + g), y = oy + 20 + Math.floor(s / cols) * (ch + g);
+      // which block is on this SM at time t2?
+      let blk = -1, prog = 0, dur = alg === 1 ? TQ * TQ : TQ, nblk = alg === 1 ? H : H * TQ;
+      const wave = Math.min(Math.floor(t2 / dur), Math.ceil(nblk / NSM) - 1);
+      const b = wave * NSM + s;
+      const waveStart = wave * dur;
+      if (b < nblk) { blk = b; prog = Math.min(1, Math.max(0, (t2 - waveStart) / dur)); }
+      // if all waves done and this SM ran nothing in last wave, check earlier waves
+      let idleForever = (s >= nblk);
+      const running = blk >= 0 && prog < 1 && t2 > 0;
+      const finished = blk >= 0 && prog >= 1;
+      el('rect', { x, y, width: cw, height: ch, rx: 5, fill: 'transparent', stroke: 'var(--line)', 'stroke-width': 1 }, svg);
+      if (blk >= 0) {
+        el('rect', { x, y, width: cw * prog, height: ch, rx: 5,
+          fill: alg === 1 ? 'var(--k)' : 'var(--q)', 'fill-opacity': finished ? 0.35 : 0.85 }, svg);
+        const lbl = alg === 1 ? `head ${blk}` : `h${Math.floor(blk / TQ)} · Q${sb(blk % TQ)}`;
+        el('text', { x: x + cw / 2, y: y + ch / 2 + 4, 'text-anchor': 'middle', 'font-size': 11,
+          fill: running ? '#fff' : 'var(--foreground)' }, svg, lbl);
+      } else {
+        el('text', { x: x + cw / 2, y: y + ch / 2 + 4, 'text-anchor': 'middle', 'font-size': 11, fill: 'var(--dim)' }, svg, idleForever ? 'idle' : '');
+      }
+      el('text', { x: x + 4, y: y + 10, 'font-size': 8, fill: 'var(--dim)' }, svg, 'SM' + s);
+    }
+  });
+  const busy1 = Math.min(H, NSM), busy2 = Math.min(H * TQ, NSM);
+  document.getElementById('clock').textContent =
+    `FA-1 keeps ${busy1}/${NSM} SMs busy · FA-2 keeps ${busy2}/${NSM} · FA-2 finishes ${(fa1Time() / fa2Time()).toFixed(1)}× sooner`;
+}
+function stop2() { clearInterval(timer2); timer2 = null; document.getElementById('play2').textContent = '▶ Play'; }
+function adv2() { const e = Math.max(fa1Time(), fa2Time()); if (t2 >= e) { stop2(); return; } t2++; drawSM(); if (t2 >= e) stop2(); }
+document.getElementById('play2').onclick = () => {
+  if (timer2) { stop2(); return; }
+  if (t2 >= Math.max(fa1Time(), fa2Time())) t2 = 0;
+  document.getElementById('play2').textContent = '❚❚ Pause';
+  timer2 = setInterval(adv2, 60);
+};
+document.getElementById('reset2').onclick = () => { stop2(); t2 = 0; drawSM(); };
+document.getElementById('H').onchange = e => { stop2(); H = +e.target.value; t2 = 0; drawSM(); };
+
+/* ---------------- section 3: warp split ---------------- */
+const WC = ['var(--chart-1,#4f7cff)', 'var(--chart-2,#e8a33d)', 'var(--chart-3,#2fae7a)', 'var(--chart-4,#a26bf0)'];
+function drawWarps(id, splitK) {
+  const svg = document.getElementById(id); svg.innerHTML = '';
+  const n = 8, c = 22, qx = 4, side = 26, gap = 8, ky = 16, sx = qx + side + gap, sy = ky + side + gap;
+  const W = sx + n * c + 70, Hh = sy + n * c + 6;
+  svg.setAttribute('viewBox', `0 0 ${W} ${Hh}`);
+  el('text', { x: qx + side / 2, y: sy - 4, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--dim)' }, svg, 'Qᵢ');
+  el('text', { x: sx + n * c / 2, y: 11, 'text-anchor': 'middle', 'font-size': 10, fill: 'var(--dim)' }, svg, 'Kⱼᵀ (and Vⱼ)');
+  // Q column
+  for (let r = 0; r < n; r++) {
+    const w = Math.floor(r / 2);
+    el('rect', { x: qx, y: sy + r * c, width: side, height: c, fill: splitK ? 'var(--muted,#8883)' : WC[w], 'fill-opacity': splitK ? 0.6 : 0.85, stroke: 'var(--card,#fff)', 'stroke-width': 1 }, svg);
+  }
+  // K row
+  for (let col = 0; col < n; col++) {
+    const w = Math.floor(col / 2);
+    el('rect', { x: sx + col * c, y: ky, width: c, height: side, fill: splitK ? WC[w] : 'var(--muted,#8883)', 'fill-opacity': splitK ? 0.85 : 0.6, stroke: 'var(--card,#fff)', 'stroke-width': 1 }, svg);
+  }
+  // S tile
+  for (let r = 0; r < n; r++) for (let col = 0; col < n; col++) {
+    const w = splitK ? Math.floor(col / 2) : Math.floor(r / 2);
+    el('rect', { x: sx + col * c, y: sy + r * c, width: c, height: c, fill: WC[w], 'fill-opacity': 0.75, stroke: 'var(--card,#fff)', 'stroke-width': 1 }, svg);
+  }
+  for (let w = 0; w < 4; w++) {
+    if (splitK) el('text', { x: sx + (w * 2 + 1) * c, y: sy + n * c / 2 + 4, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', 'font-weight': 700 }, svg, 'w' + w);
+    else el('text', { x: sx + n * c / 2, y: sy + (w * 2 + 1) * c + 4, 'text-anchor': 'middle', 'font-size': 10, fill: '#fff', 'font-weight': 700 }, svg, 'warp ' + w);
+  }
+  // annotation on the right
+  const ax = sx + n * c + 8;
+  if (splitK) {
+    el('text', { x: ax, y: sy + 12, 'font-size': 9.5, fill: 'var(--foreground)' }, svg, 'row r is in');
+    el('text', { x: ax, y: sy + 24, 'font-size': 9.5, fill: 'var(--foreground)' }, svg, 'all 4 warps');
+    el('text', { x: ax, y: sy + 46, 'font-size': 9.5, fill: 'var(--wr)' }, svg, '→ smem');
+    el('text', { x: ax, y: sy + 58, 'font-size': 9.5, fill: 'var(--wr)' }, svg, '→ sync');
+    el('text', { x: ax, y: sy + 70, 'font-size': 9.5, fill: 'var(--wr)' }, svg, '→ merge');
+  } else {
+    el('text', { x: ax, y: sy + 12, 'font-size': 9.5, fill: 'var(--foreground)' }, svg, 'row r is in');
+    el('text', { x: ax, y: sy + 24, 'font-size': 9.5, fill: 'var(--foreground)' }, svg, 'one warp');
+    el('text', { x: ax, y: sy + 46, 'font-size': 9.5, fill: 'var(--success,#2fae7a)' }, svg, 'no merge');
+  }
+}
+
+render(); drawSM(); drawWarps('w1', true); drawWarps('w2', false);
+</script>
+</body>
+</html>

@@ -15,7 +15,7 @@ ROOT=Path(__file__).resolve().parents[1]
 OUT=ROOT/'web/kernels'
 GUIDE=Path(os.environ.get('CONSUMER_GPU_GUIDE',Path.home()/'Developer/projects/consumer-gpu-kernel-guide'))
 nav='''<nav aria-label="Kernel tools" style="padding:10px 20px;border-bottom:1px solid #2a2f3a;font:13px system-ui"><a href="/kernels/" style="color:#7dd3fc;text-decoration:none">← Kernel tools</a></nav>'''
-sources={'qwen3-block':'assignment1/qwen3_block_visualizer.html','gemm':'visualizations/kernels/GEMM kernels visualizer.html','shared-memory':'visualizations/smem-bank-contention/visualizer.html','flash-attention':'visualizations/flash-attention/visualizer.html'}
+sources={'qwen3-block':'assignment1/qwen3_block_visualizer.html','gemm':'visualizations/kernels/GEMM kernels visualizer.html','shared-memory':'visualizations/smem-bank-contention/visualizer.html','flash-attention':'visualizations/flash-attention/visualizer.html','fa1-vs-fa2':'visualizations/flash-attention/fa1-vs-fa2.html'}
 # Tools whose source lives in another repository: slug -> (manifest label, path)
 external={'sm12x-attention':('consumer-gpu-kernel-guide:guides/sm12x-attention/visualizer.html',GUIDE/'guides/sm12x-attention/visualizer.html'),
  'tensorfold-vs-vllm':('consumer-gpu-kernel-guide:guides/tensorfold-vs-vllm/report.html',GUIDE/'guides/tensorfold-vs-vllm/report.html')}
@@ -26,6 +26,8 @@ def publish(slug,label,p):
  s=re.sub(r'(<body\b[^>]*>)',lambda m:m[0]+nav,s,count=1)
  if slug=='shared-memory':
   s=s.replace('</head>','<style>@media(max-width:760px){main{grid-template-columns:1fr}header{flex-wrap:wrap}aside{border-right:0;border-bottom:1px solid var(--line)}section{padding:12px;min-width:0}}</style></head>',1)
+ if slug=='fa1-vs-fa2':
+  s=s.replace('href="visualizer.html"','href="../flash-attention/"')  # the full visualizer is published under its own slug
  if slug=='sm12x-attention':
   s=s.replace('href="REPORT.md"','href="report/"')  # the report is published as rendered HTML beside the map
  target=OUT/slug/'index.html';target.parent.mkdir(parents=True,exist_ok=True);target.write_text(s)
