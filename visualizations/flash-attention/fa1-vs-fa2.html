@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlashAttention 1 vs 2</title>
 <style>
+  /* Standalone theme, matching visualizer.html and the pages.swesty.net kernel hub (dark only). */
+  :root {
+    color-scheme: dark;
+    --background: #0f1115; --foreground: #e6e8ee; --card: #171a21; --secondary: #1f2430;
+    --border: #2a2f3a; --muted: #3a4150; --muted-foreground: #8a91a3;
+    --primary: #38bdf8; --primary-foreground: #0f1115; --code-background: #12151b;
+    --success: #34c38f; --info: #3b9eff; --destructive: #ef5a5f;
+    --chart-1: #4f7cff; --chart-2: #e8a33d; --chart-3: #2fae7a; --chart-4: #a26bf0; --chart-5: #e0567a;
+    --radius: 8px; --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  body { margin: 0; background: var(--background); color: var(--foreground);
+    font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif; }
+  a { color: var(--primary); }
+  h1 { font-size: 22px; letter-spacing: -0.01em; margin: 18px 0 4px; }
   :root {
     --q: var(--chart-1, #4f7cff);
     --k: var(--chart-2, #e8a33d);
@@ -17,7 +31,8 @@
     --dim: var(--muted-foreground, #888);
   }
   * { box-sizing: border-box; }
-  .wrap { max-width: 1100px; margin: 0 auto; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 4px 20px 48px; }
+  @media (max-width: 600px) { .wrap { padding: 4px 16px 40px; } }
   h2 { font-size: 15px; margin: 22px 0 4px; }
   p.lead { margin: 0 0 10px; color: var(--dim); font-size: 13px; line-height: 1.45; }
   .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; font-size: 13px; }
@@ -58,6 +73,9 @@
 </head>
 <body>
 <div class="wrap">
+
+<h1>FlashAttention-1 vs FlashAttention-2</h1>
+<p class="lead">The same tiled math on Q, K and V with the loops swapped. FA-1 keeps a K/V tile on chip and sweeps the Q tiles past it. FA-2 keeps a Q tile and its output on chip and streams K/V past it. The <a href="visualizer.html">full FA-1–4 visualizer</a> goes deeper into each version.</p>
 
 <h2>1 · Which matrix sits in the outer loop</h2>
 <p class="lead">Both versions tile S = QKᵀ and never write S to HBM. The center grid is S, one cell per (query tile i, key tile j). Q tiles run down the left, Kᵀ tiles across the top, V tiles across the bottom (V<sub>j</sub> pairs with key tile j), and output tiles O<sub>i</sub> down the right. The bar inside each O tile shows how many K/V tiles have been folded into it so far. FA-1 sweeps <b>down each column</b> (K/V outer), and FA-2 sweeps <b>along each row</b> (Q outer).</p>
